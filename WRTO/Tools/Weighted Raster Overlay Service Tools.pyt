@@ -241,7 +241,7 @@ class Toolbox(object):
         """Define the toolbox (the name of the toolbox is the name of the
         .pyt file)."""
         self.label = "Weighted Raster Overlay Service Tools"
-        self.alias = ""
+        self.alias = "wrot"
 
         # List of tool classes associated with this toolbox
         self.tools = [featuretoRaster,configurerasterfields,optimizeRaster,buildMosiac]
