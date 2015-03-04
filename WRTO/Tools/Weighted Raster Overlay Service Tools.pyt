@@ -241,25 +241,25 @@ class Toolbox(object):
         """Define the toolbox (the name of the toolbox is the name of the
         .pyt file)."""
         self.label = "Weighted Raster Overlay Service Tools"
-        self.alias = "wrot"
+        self.alias = "wroservice"
 
         # List of tool classes associated with this toolbox
-        self.tools = [featuretoRaster,configurerasterfields,optimizeRaster,buildMosiac]
+        self.tools = [FeatureToRaster,ConfigureRasterFields,OptimizeRaster,BuildMosaic]
 
-class featuretoRaster(object):
+class FeatureToRaster(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Feature to Raster"
-        self.description = ""
+        self.label = "Feature To Raster"
+        self.description = "Creates rasters (TIFs) from input features"
         self.canRunInBackground = False
 
     def getParameterInfo(self):
         """Define parameter definitions"""
 
         inFC = arcpy.Parameter(
-        displayName="Input Feature Class",
+        displayName="Input Features",
         name="inFC",
-        datatype="DEFeatureClass",
+        datatype="GPFeatureLayer",
         parameterType="Required",
         direction="Input")
 
@@ -380,9 +380,19 @@ class featuretoRaster(object):
                 fieldName = '#'
 
         csize = parameters[3].valueAsText
-        fcprop = arcpy.Describe(infc)
+
+        # describe the input data to access input features' properties
+        desc=arcpy.Describe(infc)
+        if desc.dataType=='FeatureClass':
+            fcprop = arcpy.Describe(infc)
+        elif desc.dataType=='FeatureLayer':
+            fcprop = arcpy.Describe(infc).featureClass
+        else:
+            arcpy.addErrorMessage("{} is not a valid input feature type".format(infc))
+            sys.exit(1)
+
         shapeType = fcprop.shapeType
-        fcname = os.path.basename(infc)  #fcprop.name
+        fcname = fcprop.name
         fcwrks = fcprop.path
         outextent = parameters[5].valueAsText
 
@@ -397,7 +407,6 @@ class featuretoRaster(object):
         rmask = parameters[7].valueAsText
         sRadius = parameters[8].valueAsText
 
-#        arcpy.env.workspace = fcwrks
         env.workspace = fcwrks
 
 
@@ -465,12 +474,12 @@ class featuretoRaster(object):
 
 
 
-class configurerasterfields(object):
+class ConfigureRasterFields(object):
     in_ras = ''
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Configure Raster Fields"
-        self.description = ""
+        self.description = "Creates data for fields in the weighted overlay service's mosaic dataset."
         self.canRunInBackground = False
         self.mkey ={}
 #        self.in_ras = ""
@@ -491,15 +500,6 @@ class configurerasterfields(object):
         datatype="GPString",
         parameterType="Optional",
         direction="Input")
-
-##        colorMap = arcpy.Parameter(
-##        displayName="Color Map file",
-##        name="colormapFileName",
-##        datatype="GPString",#"DERasterDataset",
-##        parameterType="Optional",
-##        direction="Input")
-##        colorMap.filter.type = "ValueList"
-##        colorMap.filter.list = colorMapFileList() #['clr']
 
         rdescription = arcpy.Parameter(
         displayName="Description",
@@ -522,19 +522,21 @@ class configurerasterfields(object):
         parameterType="Optional",
         direction="Input")
 
-        disporder = arcpy.Parameter(
-        displayName="Display Order",
-        name="DisplayOrder",
-        datatype="GPDouble",
-        parameterType="Optional",
-        direction="Input")
+        ## unused
+##        disporder = arcpy.Parameter(
+##        displayName="Display Order",
+##        name="DisplayOrder",
+##        datatype="GPDouble",
+##        parameterType="Optional",
+##        direction="Input")
 
-        mmr = arcpy.Parameter(
-        displayName="Min Max Range",
-        name="MinMaxRange",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
+##        mmr = arcpy.Parameter(
+##        displayName="Min Max Range",
+##        name="MinMaxRange",
+##        datatype="GPString",
+##        parameterType="Optional",
+##        direction="Input")
+        ##
 
         inputRanges = arcpy.Parameter(
         displayName="Input Ranges",
@@ -571,8 +573,18 @@ class configurerasterfields(object):
         parameterType="Optional",
         direction="Input")
 
-#        params = [inRaster,title,rdescription,metadata,url,disporder,inputRanges,outputValues,noDataRanges,rangeLabels,noDataRangeLabels,mmr]
-        params = [inRaster,title,rdescription,metadata,url,inputRanges,outputValues,noDataRanges,rangeLabels,noDataRangeLabels]
+        ## derived output param
+        ## same as input raster
+        outRaster = arcpy.Parameter(
+        displayName="Output Raster",
+        name="outRaster",
+        datatype="GPRasterLayer",
+        parameterType="Derived",
+        direction="Output")
+        outRaster.parameterDependencies=[inRaster.name]
+
+        # params = [inRaster,title,rdescription,metadata,url,disporder,inputRanges,outputValues,noDataRanges,rangeLabels,noDataRangeLabels,mmr] # unused
+        params = [inRaster,title,rdescription,metadata,url,inputRanges,outputValues,noDataRanges,rangeLabels,noDataRangeLabels,outRaster]
         return params
 
     def isLicensed(self):
@@ -587,10 +599,9 @@ class configurerasterfields(object):
         if parameters[0].altered:
             inras = arcpy.Describe(parameters[0].value).catalogPath
 
+        if inras != ConfigureRasterFields.in_ras:
 
-        if inras != configurerasterfields.in_ras:
-
-            configurerasterfields.in_ras = inras
+            ConfigureRasterFields.in_ras = inras
 
             inaux = str(inras) + '.aux.wo.xml'
             if os.path.exists(inaux) == True:
@@ -626,11 +637,61 @@ class configurerasterfields(object):
                         continue
                     valu = ''
                     eachvalue.value = valu
-            return
+
+        return
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter.  This method is called after internal validation."""
+
+        rng=str(parameters[5].value)
+        inRng=rng.split(",")
+        outRng=[]
+
+        # Input range validation
+        if (parameters[5].value):
+            # Input range should be comma delimited
+            if rng.find(",")==-1:
+                parameters[5].setWarningMessage("Invalid format: Input ranges "
+                    "must be in min-inclusive, max-exclusive ordering and be "
+                    "delimited by commas. For example: 1,2,2,3,3,4.")
+            # Input range should not allow doubles/floats
+            elif rng.find(".")>-1:
+                parameters[5].setWarningMessage("Invalid format: Input ranges "
+                    "must integers in min-inclusive, max-exclusive ordering and be "
+                    "delimited by commas. For example: 1,2,2,3,3,4.")
+            # len input range should be even
+            elif len(inRng) % 2 != 0:
+                parameters[5].setWarningMessage("Invalid format: Input ranges "
+                    "should be in min-inclusive, max-exclusive ordering. "
+                    "There should be an even number of values in this range")
+
+
+        if (parameters[5].value and parameters[6].value):
+
+            outRng=str(parameters[6].value)
+            # If there are 2 input range values, there should be 1 output value
+            noCommasOutRangeAndNotValid=(len(outRng.split(","))==1 and len(inRng)!=2)
+
+            if noCommasOutRangeAndNotValid:
+                parameters[6].setWarningMessage("Invalid format: "
+                    "Input ranges should have 2 entries if output values have 1")
+            elif ((noCommasOutRangeAndNotValid and outRng.find(",")==-1)):
+                parameters[6].setWarningMessage("Invalid format: Output ranges "
+                    "must be integers delimited by commas. For example: 1,2,3,4,5.")
+            elif outRng.find(".")>-1:
+                parameters[6].setWarningMessage("Invalid format: Output ranges "
+                    "must be integers delimited by commas. For example: 1,2,3,4,5.")
+
+            # input ranges should be 2x longer than output ranges
+            outRng=str(parameters[6].value).split(",")
+            if (len(outRng) * 2) != len(inRng):
+                if len(parameters[6].message)>0:
+                    msg="{}".format(parameters[6].message)
+                    parameters[6].setWarningMessage("{} - {}".format(msg,"Invalid format: Input ranges should have twice as many entries as output"))
+                else:
+                    parameters[6].setWarningMessage("Invalid format: "
+                        "Input ranges should have twice as many entries as output")
 
         return
 
@@ -721,7 +782,7 @@ class configurerasterfields(object):
         buff.insert(in_indx, '  %s\n' % (in_buff))
         arcpy.AddMessage(str(inline))
 
-        # let's write out the updated fle.
+        # let's write out the updated file.
         try:
             if auxExist == True:
                 os.remove (auxxml)
@@ -729,13 +790,14 @@ class configurerasterfields(object):
             f = open(auxxml, 'w')
             f.writelines(buff)
             f.close()
+
         except Exception as inf:
             arcpy.AddMessage(str(inf))
             return False
 
         return
 
-class optimizeRaster(object):
+class OptimizeRaster(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Optimize Raster"
@@ -897,7 +959,7 @@ class optimizeRaster(object):
         return
 
 
-class buildMosiac(object):
+class BuildMosaic(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Build Mosaic Dataset"
@@ -914,6 +976,7 @@ class buildMosiac(object):
         parameterType="Required",
         direction="Input")
 
+        # unused
 ##        md_name = arcpy.Parameter(
 ##        displayName="Mosaic Dataset",
 ##        name="md_name",
@@ -922,10 +985,10 @@ class buildMosiac(object):
 ##        parameterType="Required",
 ##        direction="Input")
 
-        in_worksapce = arcpy.Parameter(
+        in_workspace = arcpy.Parameter(
         displayName="Output Geodatabase",
-        name="in_worksapce",
-        datatype="DEType",
+        name="in_workspace",
+        datatype="DEWorkspace",
         parameterType="Required",
         direction="Input")
 
@@ -943,8 +1006,19 @@ class buildMosiac(object):
         parameterType="Optional",
         direction="Input")
 
+        ## output param is derived
+        ## same as input workspace
+        outGdb=arcpy.Parameter(
+        displayName="Output Workspace",
+        name="outGDB",
+        datatype="DEWorkspace",
+        parameterType="Derived",
+        direction="Output")
 
-        params = [inMXD,in_worksapce,in_mosaicdataset_name]
+        outGdb.parameterDependencies=[in_workspace.name]
+        outGdb.schema.clone=True
+
+        params = [inMXD,in_workspace,in_mosaicdataset_name,outGdb]
         return params
 
     def isLicensed(self):
@@ -982,7 +1056,10 @@ class buildMosiac(object):
         parameter.  This method is called after internal validation."""
         arcpy.env.workspace = parameters[1].valueAsText
         if (parameters[1].altered == True):
-#            desc = arcpy.Describe(parameters[1].valueAsText)
+            desc = arcpy.Describe(parameters[1].valueAsText)
+            if desc.workspaceType == 'FileSystem':
+                parameters[1].setErrorMessage("Invalid workspace type: "
+                    "Use file or enterprise geodatabases")
 
             if (parameters[2].altered == True):
                 if (str(parameters[1].value) != None or str(parameters[1]) != "#"):
@@ -1009,15 +1086,36 @@ class buildMosiac(object):
                 try:
                     if lyr.isRasterLayer:
                         inMDdata = lyr.dataSource
-#                        inMDdatalist.append(inMDdata)
                         inMDdatalist = inMDdatalist + inMDdata + ';'
                 except:
                     arcpy.AddMessage(arcpy.GetMessages())
+
+            # verify that we have some rasters to process in this map doc
+            if len(inMDdatalist) < 1:
+                arcpy.AddError("No rasters in the map document")
+                arcpy.GetMessages()
+                sys.exit(1)
+
             inMDdatalist = inMDdatalist[:-1]
 
         elif descin.datatype.lower() == 'folder' or descin.datatype.lower() == 'rasterdataset' :
             inMDdatalist = inputpath
             arcpy.AddMessage("Creating Temp input Table")
+
+            initialEnv=arcpy.env.workspace
+            # verify we have some rasters in an input folder
+            try:
+                if descin.datatype.lower()=='folder':
+                    arcpy.env.workspace=inputpath
+                    rasters=arcpy.ListRasters("*","TIF")
+                    if len(rasters) < 1:
+                        arcpy.AddError("Input folder has no TIFs")
+                        sys.exit(1)
+            except Exception as e:
+                arcpy.AddError(e.message)
+            finally:
+                arcpy.GetMessages()
+                arcpy.env.workspace=initialEnv
         else:
             arcpy.AddMessage("Invalid Input ")
             return
