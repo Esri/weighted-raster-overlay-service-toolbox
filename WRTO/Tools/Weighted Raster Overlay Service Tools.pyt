@@ -1,23 +1,10 @@
 #-------------------------------------------------------------------------------
-# Name        : FeauteToRaser.pyt
-# ArcGIS Version: ArcGIS 10.1
-# Script Version: 2.3
+# Name        : Weighted Raster Overlay Service tools
+# ArcGIS Version: ArcGIS 10.3
 # Name of Company : Environmental System Research Institute
-# Author        : ESRI raster solutions team
-# Date          : 09-05-2013
-# Purpose 	    : To export images(AOIs) from ArcGIS Image Services for analysis
-# Created	    : 05-09-2013
-# LastUpdated  	: 05-09-2013
-# Required Argument : To be loaded and run from within ArcMap
-# with user arguments <URL> <MinX> <MaxX> <MinY> <MaxY> <SRS>
-# <PixelSize> <Transfer:Compression> <Transfer:CompressionQuality> <Format>
-# <Output file>
-# Optional Argument : None
-# Usage         :  Load using ArcMap catalog browser.
+# Author        : Esri
 # Copyright	    : (c) ESRI 2013
-# License	    : <your license>
 #-------------------------------------------------------------------------------
-
 
 import arcpy
 from arcpy.sa import *
@@ -285,12 +272,7 @@ class FeatureToRaster(object):
             datatype="GpString",
             parameterType="Required",
             direction="Input")
-#        infield.parameterDependencies = [inFC.name]
         infield.filter.type = "ValueList"
-
-##        if infield.hasError == True:
-##            infield.setWarningMessage = 'Field not Prenset'
-
 
         cellSize = arcpy.Parameter(
         displayName="Cell Size",
@@ -327,7 +309,6 @@ class FeatureToRaster(object):
         parameterType="Optional",
         direction="Input")
 
-
         params = [inFC,outputRaster,processname,cellSize,infield,outputextent,snapraster,maskEnv,searchradius]
         return params
 
@@ -344,7 +325,7 @@ class FeatureToRaster(object):
             fieldList = []
             for each in flist:
                 fieldList.append(each.name)
-#            fieldList.append("None")
+
             parameters[4].filter.list = fieldList
             if parameters[2].valueAsText == 'Distance':
                 fdesc = arcpy.Describe(parameters[0].valueAsText)
@@ -364,12 +345,15 @@ class FeatureToRaster(object):
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter.  This method is called after internal validation."""
-#        if parameters[4].hasError
 
         return
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
+        if arcpy.CheckExtension("Spatial")!="Available":
+            arcpy.AddError("Spatial Analyst extension is not available")
+            return
+
         arcpy.CheckOutExtension("Spatial")
         pname = parameters[2].valueAsText
         infc = parameters[0].valueAsText
@@ -383,13 +367,13 @@ class FeatureToRaster(object):
 
         # describe the input data to access input features' properties
         desc=arcpy.Describe(infc)
-        if desc.dataType=='FeatureClass':
+        if (desc.dataType=='FeatureClass' or desc.dataType=='ShapeFile'):
             fcprop = arcpy.Describe(infc)
         elif desc.dataType=='FeatureLayer':
             fcprop = arcpy.Describe(infc).featureClass
         else:
-            arcpy.addErrorMessage("{} is not a valid input feature type".format(infc))
-            sys.exit(1)
+            arcpy.AddError("{} is not a valid input feature type".format(infc))
+            return
 
         shapeType = fcprop.shapeType
         fcname = fcprop.name
@@ -409,12 +393,10 @@ class FeatureToRaster(object):
 
         env.workspace = fcwrks
 
-
         if (sraster is None):
             sraster = "#"
         if (sraster != '#'):
             arcpy.env.snapRaster = sraster
-#            arcpy.AddMessage("added Snap raster")
 
         if (rmask is None):
             rmask = "#"
@@ -425,53 +407,60 @@ class FeatureToRaster(object):
         if (sRadius is None):
             sRadius = "#"
 
-#            arcpy.AddMessage("added Mask")
-#            arcpy.AddMessage(str(arcpy.env.mask))
-
-        arcpy.AddMessage(str(rmask))
+        # Process namem = density
         if pname.lower() == 'density':
 
             if shapeType.lower() == 'polyline':
-                arcpy.AddMessage("generating raster for Line Density")
+                arcpy.AddMessage("Line Density {} {} {} {}".format(infc, fieldName, csize, sRadius))
                 ldensity = LineDensity(infc,fieldName,csize,sRadius)
                 ldensity.save(outRaster)
             elif shapeType.lower() == 'point':
-                arcpy.AddMessage("generating raster for Point Density")
+                arcpy.AddMessage("Point Density {} {} {}".format(infc,fieldName,csize))
                 pdensity = PointDensity(infc,fieldName,csize)
                 pdensity.save(outRaster)
             else:
-                arcpy.AddMessage("Input Geomerty should be line or Point, Input shape is " + str (shapeType.lower()))
-        elif pname.lower() == 'distance':
-            argsdist= []
-            argsdist = [pythonPath, os.path.join(toolPath,'Distance.py')]
-            argsdist.append(infc)
-            argsdist.append(outRaster)
-            argsdist.append(csize)
-            argsdist.append(rmask)
-            p = subprocess.Popen(argsdist, creationflags=subprocess.SW_HIDE, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-            message = ''
-            while True:
-                message = p.stdout.readline()
-                if not message:
-                    break
-                arcpy.AddMessage(message.rstrip())      #remove newline before adding.
-            print " The process is completed"
-            argsdist = []
+                arcpy.AddError("Input Geomerty should be line or Point, Input shape is {}".format(shapeType.lower()))
+                return
 
+        # process name = distance
+        elif pname.lower() == 'distance':
+            previousmask = arcpy.env.mask
+            if rmask != "#":
+                arcpy.env.mask = rmask
+
+            try:
+                arcpy.AddMessage("Executing EucDistance {} # {}".format(infc, csize))
+                eucdist=EucDistance(infc,"#",csize)
+                eucdist.save(outRaster)
+                if arcpy.Exists(outRaster):
+                    arcpy.AddMessage("Saved new raster to {}".format(outRaster))
+                else:
+                    arcpy.AddMessage("Unable to find Output Raster {}".format(outRaster))
+            except Exception as e:
+                arcpy.AddError(e.message)
+                return
+
+            finally:
+                arcpy.GetMessages()
+                # reset the environment
+                arcpy.env.mask=previousmask
+
+
+        # process name = key attribute or present/absent
         elif pname.lower() == 'keyattribute' or pname.lower() == 'present/absent':
 
             if shapeType.lower() == 'polyline':
-                arcpy.AddMessage("generating raster for Line " + str(pname.lower()))
+                arcpy.AddMessage("Polyline To Raster {} {} {} {} {} {}".format(infc,fieldName,outRaster,"#","#",csize))
                 arcpy.PolylineToRaster_conversion(infc,fieldName,outRaster,"#","#",csize)
             elif shapeType.lower() == 'polygon':
-                arcpy.AddMessage("generating raster for Polygon " + str(pname.lower()))
+                arcpy.AddMessage("Polygon To Raster {} {} {} {} {} {}".format(infc,fieldName,outRaster,"CELL_CENTER","#",csize))
                 arcpy.PolygonToRaster_conversion(infc,fieldName,outRaster,"CELL_CENTER","#",csize)
             else:
-                arcpy.AddMessage("Input Geomerty should be line or Polygon, Input shape is " + str (shapeType.lower()))
+                arcpy.AddError("Input Geomerty should be line or Polygon, Input shape is " + str (shapeType.lower()))
+                return
         else:
             arcpy.AddMessage("Invalid Process Name")
         return
-
 
 
 class ConfigureRasterFields(object):
@@ -629,7 +618,7 @@ class ConfigureRasterFields(object):
                     valu = ''
                     if self.mkey.has_key(eachp.name):
                         valu = self.mkey[eachp.name]
-#                            if (eachp.altered) == False:
+
                     eachp.value = valu
             else:
                 for eachvalue in parameters:
@@ -753,7 +742,6 @@ class ConfigureRasterFields(object):
             for mtag in tempbuff:
                 j = j+1
                 if mtag.lower().find(str(sNNL[q]).lower()) >= 0:
-    #                        arcpy.AddMessage(str(j))
                     print (str(sNNL[q]).lower())
                     del buff[j-1]
                     break
@@ -1055,17 +1043,28 @@ class BuildMosaic(object):
         """Modify the messages created by internal validation for each tool
         parameter.  This method is called after internal validation."""
         arcpy.env.workspace = parameters[1].valueAsText
-        if (parameters[1].altered == True):
-            desc = arcpy.Describe(parameters[1].valueAsText)
-            if desc.workspaceType == 'FileSystem':
-                parameters[1].setErrorMessage("Invalid workspace type: "
-                    "Use file or enterprise geodatabases")
+        try:
+            if (parameters[1].altered == True):
+                desc = arcpy.Describe(parameters[1].valueAsText)
+                if desc.workspaceType != 'LocalDatabase':
+                    parameters[1].setErrorMessage("Invalid workspace type: "
+                        "Use only file geodatabases for output workspace")
 
+        except Exception as e:
+            parameters[1].setErrorMessage(e.message)
+            return
+
+        try:
             if (parameters[2].altered == True):
                 if (str(parameters[1].value) != None or str(parameters[1]) != "#"):
                     mdPath = os.path.join(parameters[1].valueAsText,parameters[2].valueAsText)
                     if arcpy.Exists(mdPath):
-                        parameters[1].setWarningMessage(parameters[2].valueAsText + " Mosaic Dataset Exist, It will add the data to same Mosaic dataset")
+                        parameters[1].setWarningMessage(parameters[2].valueAsText + ": Mosaic dataset exists. Data will be added to the mosaic dataset.")
+
+        except Exception as e1:
+            parameters[1].setErrorMessage(e1.message)
+            return
+
         return
 
     def execute(self, parameters, messages):
@@ -1093,14 +1092,13 @@ class BuildMosaic(object):
             # verify that we have some rasters to process in this map doc
             if len(inMDdatalist) < 1:
                 arcpy.AddError("No rasters in the map document")
-                arcpy.GetMessages()
-                sys.exit(1)
+                return
 
             inMDdatalist = inMDdatalist[:-1]
 
         elif descin.datatype.lower() == 'folder' or descin.datatype.lower() == 'rasterdataset' :
             inMDdatalist = inputpath
-            arcpy.AddMessage("Creating Temp input Table")
+            arcpy.AddMessage("Scanning raster layers from folder {}".format(inputpath))
 
             initialEnv=arcpy.env.workspace
             # verify we have some rasters in an input folder
@@ -1110,17 +1108,18 @@ class BuildMosaic(object):
                     rasters=arcpy.ListRasters("*","TIF")
                     if len(rasters) < 1:
                         arcpy.AddError("Input folder has no TIFs")
-                        sys.exit(1)
+                        return
+
             except Exception as e:
                 arcpy.AddError(e.message)
+                return
+
             finally:
                 arcpy.GetMessages()
                 arcpy.env.workspace=initialEnv
         else:
-            arcpy.AddMessage("Invalid Input ")
+            arcpy.AddError("Unknown input")
             return
-
-#        arcpy.AddMessage(inMDdatalist)
 
         ret_info = suffixExtractNames(inMDdatalist)
         if (len(ret_info) == 0):
