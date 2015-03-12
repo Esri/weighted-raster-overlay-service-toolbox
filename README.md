@@ -1,4 +1,4 @@
-# Weighted-Raster-Overlay-Service-toolbox
+# weighted-raster-overlay-service-toolbox
 
 Tools to create and configure data for web-based weighted overlay to support suitability modeling. 
 
@@ -6,7 +6,7 @@ This python toolbox helps you create and configure a mosaic dataset for use in a
 
 [GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/)
 
-![App](https://github.com/ArcGIS/Weighted-Raster-Overlay-Service-toolbox/blob/master/git_graphic.png)
+![App](https://raw.github.com/ArcGIS/weighted-raster-overlay-service-toolbox/blob/master/weighted-raster-overlay-service-toolbox.png)
 
 ## Features
 * Feature To Raster - Rasterize vector data using distance, density, presence/absence, or attribute processes
@@ -54,7 +54,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-A copy of the license is available in the repository's [license.txt]( https://github.com/ArcGIS/Weighted-Raster-Overlay-Service-toolbox/blob/master/license.txt) file.
+A copy of the license is available in the repository's [license.txt]( https://raw.github.com/ArcGIS/weighted-raster-overlay-service-toolbox/blob/master/license.txt) file.
 
-[](Esri Tags: ArcGIS GeoPlanner Weighted Raster Overlay Service WRO weightedOverlayService Suitability Risk Analysis Modeling Web ) 
+[](Esri Tags: ArcGIS GeoPlanner weighted raster overlay service wro weightedOverlayService Suitability Risk Analysis Modeling Web ) 
 [](Esri Language: Python)
