@@ -1,1 +1,1 @@
-c:\Python27\ArcGIS10.2\python.exe f:\abhijit\Landscape\v3\scripts\MDCS.py -i:f:\abhijit\Landscape\v3\Parameter\Config\LSM.xml -m:F:\abhijit\Landscape\v3\MD\LSM.gdb\LSM_Service -s:F:\abhijit\Landscape\v3\data\usfs_land_raster_presence_absence.tif
+c:\Python27\ArcGIS10.3\python.exe f:\model\v3\scripts\MDCS.py -i:f:\model\v3\Parameter\Config\LSM.xml -m:F:\model\v3\MD\suitability.gdb\service -s:F:\model\v3\data\land_raster_presence_absence.tif
