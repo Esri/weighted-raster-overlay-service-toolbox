@@ -17,6 +17,7 @@ This python toolbox helps you create and configure a mosaic dataset for use in a
 
 1. Fork and then clone the repo. 
 2. Open ArcGIS Desktop and browse to the python toolbox.
+3. [Review this doc to setup your weighted overlay service] (http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
 
 ## Requirements
 
@@ -28,6 +29,8 @@ This python toolbox helps you create and configure a mosaic dataset for use in a
 ## Resources
 
 * [GeoPlanner documentation](http://doc.arcgis.com/en/geoplanner/guide/what-is-a-geodesign-project.htm)
+* [Understanding weighted overlay in GeoPlanner](http://doc.arcgis.com/en/geoplanner/documentation/find-the-best-place-using-weighted-overlay.htm)
+* [Build your own weighted raster overlay service](http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
 * [ArcGIS Blog](http://blogs.esri.com/esri/arcgis/)
 * [twitter@esri](http://twitter.com/esri)
 
