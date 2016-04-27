@@ -156,6 +156,7 @@
 			<compression_method>JPEG</compression_method>
 			<compression_quality>85</compression_quality>
 		</DefineOverviews>
+<!--
    <EditRasterFunction>
 			<edit_mosaic_dataset_item>#</edit_mosaic_dataset_item>
 			<edit_options>INSERT</edit_options>
@@ -170,6 +171,7 @@
       <location_function_name>#</location_function_name>
 
 		</EditRasterFunction>
+-->
         <CalculateValues>
 
          <CalculateValue>
