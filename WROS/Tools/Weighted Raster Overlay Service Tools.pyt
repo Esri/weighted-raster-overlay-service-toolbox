@@ -1137,9 +1137,9 @@ class BuildMosaic(object):
 
         configName = 'LSM.xml'
         config = os.path.join(configBase , configName)
-        rftpath = parameterPath + 'RasterFunctionTemplates/KeyMetadata.rft.xml'
-        pyPath = parameterPath + 'RasterFunction/KeyMetadata.py'
-        updatepyPath(rftpath, pyPath)
+        #rftpath = parameterPath + 'RasterFunctionTemplates/KeyMetadata.rft.xml'
+        #pyPath = parameterPath + 'RasterFunction/KeyMetadata.py'
+        #updatepyPath(rftpath, pyPath)
         objTable = AUXTable();
 
         (fd, filename) = tempfile.mkstemp()
