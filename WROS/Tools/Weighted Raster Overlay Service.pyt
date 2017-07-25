@@ -172,9 +172,13 @@ class CreateWeightedOverlayMosaic(object):
             # Create the mosaic and get its output (for the output param)
             arcpy.AddMessage("Creating the mosaic dataset")
             res=arcpy.CreateMosaicDataset_management(workspace,mosaicName,spatialref,'#', '#', 'NONE', '#')
+
+	    #JW edits on 7/18/17. Change the Mosaic interpolation mode to nearest neighbor
+            arcpy.SetMosaicDatasetProperties_management(res, resampling_type='NEAREST')
+
             arcpy.AddMessage(arcpy.GetMessages())
-
-
+	    
+	    
         except Exception as e2:
             arcpy.AddError("Error creating the mosaic {}:{} ".format(outMosaic,e2.message))
             return
