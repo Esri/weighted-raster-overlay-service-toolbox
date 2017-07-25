@@ -174,7 +174,7 @@ class CreateWeightedOverlayMosaic(object):
             res=arcpy.CreateMosaicDataset_management(workspace,mosaicName,spatialref,'#', '#', 'NONE', '#')
 
 	    #JW edits on 7/18/17. Change the Mosaic interpolation mode to nearest neighbor
-            arcpy.SetMosaicDatasetProperties_management(res, resampling_type='NEAREST')
+            res =arcpy.SetMosaicDatasetProperties_management(res, resampling_type='NEAREST')
 
             arcpy.AddMessage(arcpy.GetMessages())
 	    
@@ -190,7 +190,8 @@ class CreateWeightedOverlayMosaic(object):
                 fname=fldDef[0]
                 ftype=fldDef[1]
                 flength=fldDef[2]
-                arcpy.AddField_management(outMosaic,fname,ftype,"#","#",flength)
+
+                arcpy.AddField_management(outMosaic,fname,ftype,field_length=flength) 	
                 #TODO - KW: Change this from Added Field to .AddMessage(arcpy.GetMessages())
                 arcpy.AddMessage(arcpy.GetMessages())
 
@@ -236,9 +237,11 @@ class CreateWeightedOverlayMosaic(object):
                 inputranges=e[0][1].text
                 outputVals=e[0][2].text
                 labels=e[0][3].text
+                rasterFileName=e[0][4].text
 
                 # create a where clause from title
-                where="{}='{}'".format(self.updMoFieldsQuery[0],title)
+		# JWTODO: change query based on title to based on rasterfilename
+                where="{}='{}'".format(self.updMoFieldsQuery[0],rasterFileName)
 
                 # update the mosaic with data from the wo.xml file
                 # self.updMoFields = ["Title","RangeLabels","InputRanges","OutputValues"]
@@ -366,7 +369,9 @@ class CreateWeightedOverlayMosaic(object):
                 rasterExtension=""
                 outputValues=""
                 labels=""
-                
+
+                rasterFileName = ""
+
                 inras=""
                 inaux=""
 
@@ -379,6 +384,10 @@ class CreateWeightedOverlayMosaic(object):
                         rasterpath=l.dataSource
                         #layerDesc=l.description
                         rasterExtension="" # clear any values set
+
+                        # Define raster file name from folder path
+                        counter = rasterpath.rfind("\\") +1
+                        rasterFileName = rasterpath[counter:len(rasterpath)]
 
                         # describe the raster to get its no data values & other info
                         desc=arcpy.Describe(l)
@@ -394,8 +403,13 @@ class CreateWeightedOverlayMosaic(object):
                             rastertitle=rastertitle.replace(rasterExtension,"")
                             if rastertitle.endswith("."):
                                 rastertitle=rastertitle.replace(".","")
-
                             arcpy.AddWarning("Removed extension {} from layer {}".format(rasterExtension,rastertitle))
+
+                            # remove it from file name
+                            rasterFileName = rasterFileName.replace(rasterExtension, "")
+                            if rasterFileName.endswith("."):
+                                rasterFileName=rasterFileName.replace(".","")
+
 
                         except Exception as eExt:
                             arcpy.AddError("Extension error {}".format(eExt.message))
@@ -449,6 +463,7 @@ class CreateWeightedOverlayMosaic(object):
                         ET.SubElement(metadata,"MDI", key="InputRanges").text=inputRanges
                         ET.SubElement(metadata,"MDI", key="OutPutValues").text=outputValues
                         ET.SubElement(metadata,"MDI", key="RangeLabels").text=labels
+                        ET.SubElement(metadata, "MDI", key="FileName").text=rasterFileName
                         tree=ET.ElementTree(pmdataset)
                         tree.write(inaux)
 
