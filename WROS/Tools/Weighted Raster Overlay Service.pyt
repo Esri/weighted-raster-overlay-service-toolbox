@@ -171,21 +171,15 @@ class CreateWeightedOverlayMosaic(object):
 
             # Create the mosaic and get its output (for the output param)
             arcpy.AddMessage("Creating the mosaic dataset")
-            res=arcpy.CreateMosaicDataset_management(workspace,mosaicName,spatialref,'#', '#', 'NONE', '#')
+            res = arcpy.CreateMosaicDataset_management(workspace,mosaicName,spatialref,'#', '#', 'NONE', '#')
 
-	    #JW edits on 7/18/17. Change the Mosaic interpolation mode to nearest neighbor
-            res =arcpy.SetMosaicDatasetProperties_management(res, resampling_type='NEAREST')
-
-            arcpy.AddMessage(arcpy.GetMessages())
-	    
-	    
         except Exception as e2:
             arcpy.AddError("Error creating the mosaic {}:{} ".format(outMosaic,e2.message))
             return
 
         try:
             # create additional fields for the mosaic
-            arcpy.AddMessage("Adding weighted overlay fields to the mosaic dataset")
+            arcpy.AddMessage("Adding weighted overlay fields to the mosaic dataset...")
             for fldDef in self.outMoFields:
                 fname=fldDef[0]
                 ftype=fldDef[1]
@@ -198,6 +192,18 @@ class CreateWeightedOverlayMosaic(object):
         except Exception as e3:
             arcpy.AddError("Error adding fields to the mosaic {}: ".format(outMosaic,e3.message))
             return
+
+
+        try:
+            #Change the Mosaic resampling type to Nearest Neighbor
+            arcpy.AddMessage("Setting resampling type...")
+            res = arcpy.SetMosaicDatasetProperties_management(res, resampling_type='NEAREST')
+            arcpy.AddMessage(arcpy.GetMessages())
+
+        except Exception as e_resampling:
+            arcpy.AddError("Error setting resampling type {}: ".format(outMosaic,e_resampling.message))
+            return
+
 
         try:
             # add rasters from the map document to the mosaic
