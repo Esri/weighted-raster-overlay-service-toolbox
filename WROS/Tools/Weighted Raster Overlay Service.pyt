@@ -187,8 +187,8 @@ class CreateWeightedOverlayMosaic(object):
                 ftype=fldDef[1]
                 flength=fldDef[2]
                 arcpy.AddField_management(outMosaic,fname,ftype,"#","#",flength)
-                #TODO: Change this from Added Field to .AddMessage(arcpy.GetMessages())
-                arcpy.AddMessage("Added field {}".format(fname))
+                #TODO - KW: Change this from Added Field to .AddMessage(arcpy.GetMessages())
+                arcpy.AddMessage(arcpy.GetMessages())
 
         except Exception as e3:
             arcpy.AddError("Error adding fields to the mosaic {}: ".format(outMosaic,e3.message))
@@ -254,250 +254,6 @@ class CreateWeightedOverlayMosaic(object):
             return
 
         return
-
-    def AddWeightedOverlayInfo(this,mLyrs):
-        ## TODO: Remove this function!!!!
-        try:
-            if (mLyrs):
-                rasterLayers=[]
-                lyrCheck=[]
-
-                # check for raster layers with classified renderers
-                for l in mLyrs:
-                    if (l.isRasterLayer):
-                        if l.name in lyrCheck:
-                            arcpy.AddError("This document contains duplicate raster layer names. Use uniquely named layers.")
-                            return False
-                        else:
-                            lyrCheck.append(l.name)
-                            sym=l.symbology
-
-                            if hasattr(sym,'colorizer'):
-                                if sym.colorizer.type == "RasterClassifyColorizer":
-                                    rasterLayers.append(l)
-                                else:
-                                    arcpy.AddWarning("Invalid colorizer configured for layer {}".format(l.name))
-                                    arcpy.AddWarning("Configure layer {} with a classified renderer".format(l.name))                                    
-                                    arcpy.GetMessages()
-   
-                            elif hasattr(sym,'renderer'):
-                                    arcpy.AddWarning("Invalid Renderer - it has a renderer")
-                                    arcpy.GetMessages()
-
-                            else:
-                                arcpy.AddWarning("Unknown symbology configured for layer {}".format(l.name))
-                                arcpy.AddWarning("Configure layer {} with a classified colorizer".format(l.name))
-                                arcpy.GetMessages()
-
-                    else:
-                        arcpy.AddWarning("Cannot process layer {}. Not a raster layer".format(l.name))
-
-                # exit if there are none
-                if len(rasterLayers)<1:
-                    arcpy.AddError("There are no raster layers with classified renderers to process in this document")
-                    return False
-                else:
-                    arcpy.AddMessage("Processing {} raster layers".format(len(rasterLayers)))
-
-                rastertitle=""
-                rasterpath=""
-                rasterNoDataLabel="NoData"
-                rasterExtension=""
-                insertTuple=()
-                insertValues=[]
-                urlValue=""
-                outValue=1
-                cnt=0
-                cbvCnt=1
-                inras=""
-                inaux=""
-
-                # check for labels on those classifications
-                for l in rasterLayers:
-                    try:
-                        arcpy.AddMessage("Processing layer {}...".format(l.name))
-                        rastertitle=l.name # This is probably the layer name
-                        # Create another variable that represents the toc layer name
-                        rasterpath=l.dataSource
-                        #layerDesc=l.description
-                        rasterExtension="" # clear any values set
-
-                        # describe the raster to get its no data values & other info
-                        desc=arcpy.Describe(l)
-                        inras=desc.catalogPath
-                        inaux="{}.aux.wo.xml".format(inras)
-                        arcpy.AddMessage(inaux)
-
-                        # check for an extension in the name (like foo.tif)
-                        try:
-                            rasterExtension=desc.extension
-
-                            # remove it from the title
-                            rastertitle=rastertitle.replace(rasterExtension,"")
-                            if rastertitle.endswith("."):
-                                rastertitle=rastertitle.replace(".","")
-
-                            arcpy.AddWarning("Removed extension {} from layer {}".format(rasterExtension,rastertitle))
-
-                        except Exception as eExt:
-                            arcpy.AddError("Extension error {}".format(eExt.message))
-                            pass
-
-
-                        # check for labels
-                        sym=l.symbology
-                        cbl=sym.classBreakLabels
-                        if cbl==type(None):
-                            arcpy.AddError("Layer {} is missing labels".format(l.name))
-                            return False
-                        elif len(cbl) < 1:
-                            arcpy.AddError("Layer {} is missing labels".format(l.name))
-                            return False
-                        elif len(cbl)<2:
-                            arcpy.AddError("Layer {} must have more than 1 class break".format(l.name))
-                            return False
-                        elif len(cbl)==2:
-                            # reset cnt for case of 2 class labels (in/out)
-                            cnt=0
-                        elif len(cbl)>2:
-                            # reset cnt for case of +2 class labels (1-9)
-                            cnt=1
-
-                        # Alert user if there are more than 9 classes -
-                        # they can review the output wo.xml and make changes
-                        # if needed
-                        if len(cbl)>9:
-                            arcpy.AddWarning("Layer {} has more than 9 classes. Review this raster's wo.xml file to ensure valid output values".format(l.name))
-
-                        # get class break values
-                        cbv=sym.classBreakValues
-                        cbvCnt=0
-
-                        # check the difference between the first and last class breaks value
-                        if abs(cbv[-1]-cbv[0]) < 1:
-                            arcpy.AddError("Invalid Renderer configured for layer {}".format(l.name))
-                            arcpy.AddError("The difference between the min and max values in the dataset must exceed 1.")
-                            arcpy.AddError("Convert {} to an integer raster.".format(l))
-                            return False
-
-                        # check min and max values in the dataset
-                        res=arcpy.GetRasterProperties_management(inras,"MINIMUM")
-                        minVal=res.getOutput(0)
-                        res=arcpy.GetRasterProperties_management(inras,"MAXIMUM")
-                        maxVal=res.getOutput(0)
-                        #arcpy.AddMessage("{} - {}".format(maxVal,minVal))
-
-                        # see structure of the classBreakValues list
-                        if cbv[0]==cbv[1]:
-                            # case where values are similar to 0.0, 0.0, 1.0
-                            cbv1=[]
-                            cbv1.append(cbv[0])
-                            loopRanges=cbv[1:len(cbv)]
-                            # we need to add 1 to items 1=len(cbv)
-                            for vr in loopRanges:
-                                cbv1.append(vr+1)
-                        else:
-                            cbv1=list(cbv)
-
-                        # convert these class breaks list values to ints
-                        cbvInts = [int(math.floor(cbvDbl)) for cbvDbl in cbv1]
-                        inputRanges=[]
-
-                        # examine labels: remove any commas and add a warning
-                        labels=[]
-                        for lbl in cbl:
-                            if lbl.find(",") > -1:
-                                labels.append(lbl.replace(",",""))
-                                arcpy.AddWarning("Removed comma from label {} in weighted overlay data".format(lbl))
-                            else:
-                                labels.append(lbl)
-
-                        for lbl in labels:
-                            if len(lbl) < 1:
-                                arcpy.AddError("Layer {} is missing labels".format(l.name))
-                                return False
-                            else:
-                                #Create the input Ranges list of min inclusive and max exclusive values
-                                rngMin=cbvInts[cbvCnt]
-                                rngMax=cbvInts[cbvCnt+1]
-
-                                # check the difference between the min and max value in this class break
-                                if rngMax-rngMin == 0:
-                                    arcpy.AddError("Invalid class break value found in layer {}".format(l))
-                                    arcpy.AddError("The difference between min and max values in a class break must exceed 1")
-                                    arcpy.AddError("Check class break associated with label {}".format(lbl))
-                                    return False
-
-                                # check for the end of the range
-                                if cbvCnt+2==len(cbvInts):
-                                    #last one - add 1 to rngMax
-                                    rngMax+=1
-
-                                # increment the counter
-                                cbvCnt+=1
-
-                                # input ranges
-                                inputRanges.append(rngMin)
-                                inputRanges.append(rngMax)
-
-                                outputValues=""
-
-                        #based on count of labels, create output values
-                        if len(labels)==3:
-                            outputValues="1,5,9"
-                        elif len(labels)==9:
-                            outputValues="1,2,3,4,5,6,7,8,9"
-                        elif len(labels)==5:
-                            outputValues="1,3,5,7,9"
-                        elif len(labels)==4:
-                            outputValues="1,4,6,9"
-                        elif len(labels)==6:
-                            outputValues="1,3,4,5,7,9"
-                        elif len(labels)==7:
-                            outputValues="1,3,4,5,6,7,9"
-                        elif len(labels)==8:
-                            outputValues="1,2,3,4,5,6,7,9"
-                        elif len(labels)==2:
-                            outputValues="0,1"
-                        elif len(labels) > 9:
-                            # 1-9, then reset count to 1
-                            outputValues="1,2,3,4,5,6,7,8,9"
-                            lcnt=len(labels)-9
-                            for i in range(0,lcnt):
-                                oVal=i+1
-                                if oVal > 9: oVal=1
-                                outputValues+=",{}".format(oVal)
-
-                        # delete the wo.xml if it exists
-                        if arcpy.Exists(inaux):
-                            arcpy.Delete_management(inaux)
-                            arcpy.AddMessage(arcpy.GetMessages())
-                        else:
-                            arcpy.AddMessage("Creating file {}".format(inaux))
-
-                        # create the wo.xml file and write data to it.
-                        pmdataset=ET.Element("PAMDataset")
-                        metadata=ET.SubElement(pmdataset,"Metadata")
-                        ET.SubElement(metadata,"MDI", key="Title").text=rastertitle
-                        # TODO: Write another element - TocLayerTitle
-                        ET.SubElement(metadata,"MDI", key="InputRanges").text=','.join(map(str, inputRanges))
-                        ET.SubElement(metadata,"MDI", key="OutPutValues").text="{}".format(outputValues)
-                        ET.SubElement(metadata,"MDI", key="RangeLabels").text=','.join(labels)
-                        tree=ET.ElementTree(pmdataset)
-                        tree.write(inaux)
-
-                    except Exception as e1:
-                        arcpy.AddError("Exception occurred: {}".format(e1.message))
-                        return False
-            else:
-                arcpy.AddError("Invalid map document: {}".format(aMapdoc))
-                return False
-
-            return True
-
-        except Exception as e:
-            arcpy.AddError("Exception occurred: {}".format(e.message))
-            return False
 
     def makeInputRanges(this,sourceRaster):
         # Creates input ranges from classified colorizers (or no colorizers)
@@ -600,20 +356,13 @@ class CreateWeightedOverlayMosaic(object):
                 else:
                     arcpy.AddMessage("Processing {} raster layers".format(len(rasterLayers)))
 
-                # TODO: some of the following variables are not used - remove them.
+                # TODO - KW: some of the following variables are not used - remove them.
                 rastertitle=""
                 rasterpath=""
-                rasterNoDataLabel="NoData"
                 rasterExtension=""
                 outputValues=""
                 labels=""
                 
-                insertTuple=()
-                insertValues=[]
-                urlValue=""
-                outValue=1
-                cnt=0
-                cbvCnt=1
                 inras=""
                 inaux=""
 
