@@ -2,7 +2,7 @@
 
 Tools to create and configure data for web-based weighted overlay to support suitability modeling. 
 
-This python toolbox helps you create and configure a mosaic dataset for use in a web-based weighted overlay analysis service. You can use these services from web-based clients like GeoPlanner for ArcGIS to help find the best place or identify risks in an area.
+This python toolbox helps you create and configure a mosaic dataset for use in a web-based weighted overlay analysis service. You can use these services from web-based clients like GeoPlanner for ArcGIS to help find the best place or identify risks in an area. 
 
 [GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/)
 
