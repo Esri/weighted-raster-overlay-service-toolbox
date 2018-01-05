@@ -8,7 +8,7 @@ Note: This is an update to a previous toolbox. This update contains tools that a
 
 [GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/)
 
-![App](https://github.com/ArcGIS/weighted-raster-overlay-service-toolbox/blob/master/weighted-raster-overlay-service-toolbox.png)
+![App](https://github.com/Esri/weighted-raster-overlay-service-toolbox/blob/master/Suitability%20Modeler%20in%20Web%20AppBuilder.png)
 
 ## Features
 * Create Weighted Overlay Mosaic - Creates a new mosaic dataset for weighted overlay analysis. The tool writes all .tif raster layers in an ArcGIS Pro Contents Pane to the mosaic. Symbology information is read from each layer and written to fields within the mosaic. 
