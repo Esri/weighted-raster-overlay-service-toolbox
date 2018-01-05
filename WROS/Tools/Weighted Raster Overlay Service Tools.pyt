@@ -1,9 +1,9 @@
 #-------------------------------------------------------------------------------
 # Name        : Weighted Raster Overlay Service tools
-# ArcGIS Version: ArcGIS 10.3
+# ArcGIS Version: ArcGIS 10.5
 # Name of Company : Environmental System Research Institute
 # Author        : Esri
-# Copyright	    :    Copyright 2015 Esri
+# Copyright	    :    Copyright 2017 Esri
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
 #   You may obtain a copy of the License at
@@ -16,221 +16,10 @@
 #-------------------------------------------------------------------------------
 
 import arcpy
-from arcpy.sa import *
-from arcpy import env
-import sys, os
-import subprocess
-import time
-from xml.dom import minidom
-import tempfile
-toolPath = os.path.dirname(os.path.realpath(__file__))
-solutionLib_path = os.path.join(os.path.dirname(toolPath), "Scripts")
-pythonPath = os.path.dirname(os.path.dirname(os.__file__)) + "/python.exe"
-configBase = os.path.dirname(os.path.dirname(__file__)) + "/Parameter/Config/"
-clrpath = os.path.dirname(os.path.dirname(__file__)) + "/Parameter/Colormaps"
-parameterPath = os.path.dirname(os.path.dirname(__file__)) + "/Parameter/"
+import types
+import string, random, os, locale
 
-
-#Internal messages from aExport object get printed here.
-def Messages(msg):
-    arcpy.AddMessage(msg)
-
-
-def readAUX(input):
-    ret_aux = {}
-    if os.path.exists(input):
-        doc = minidom.parse(input)
-    else:
-        return ret_aux
-    nodeName = 'MDI'
-    parent_node = doc.getElementsByTagName('Metadata')[0]
-    node_lst = doc.getElementsByTagName(nodeName)
-    if (len(node_lst) == 0):
-        return False
-
-    for n in node_lst:
-        if (n.parentNode != parent_node):
-            continue
-        try:
-            key = str(n.getAttributeNode('key').nodeValue)
-            ret_aux[key] = {'value' :  str(n.firstChild.nodeValue)}
-        except Exception as exp:
-            print str(exp)
-    return ret_aux
-
-
-def suffixExtractNames (path):
-
-    filter = 'tif'
-    ret_files = {}
-
-    if (os.path.exists(path) == False):
-        s = path.split(';')
-        for sel_file in s:
-            aux_ = '%s.aux.wo.xml' % (sel_file)
-            ret_files[sel_file] = readAUX(aux_)
-        return ret_files
-
-    for r,d,f in os.walk(path):
-        for file in f:
-            extension = file[-3:]
-            if (extension.lower() == filter):
-                sel_file = os.path.join(r, file)
-                aux_ = '%s.aux.wo.xml' % (sel_file)
-                ret_files[sel_file] = readAUX(aux_)
-
-    return ret_files
-
-def updatepyPath(rftpath,pyPath):
-    sm_doc = minidom.parse(rftpath)
-
-    nodes = sm_doc.getElementsByTagName('Names')
-    node = nodes[0].firstChild
-    index_  = 0
-    py_index_ = -1
-
-    while (node != None):
-        if (node.hasChildNodes() == False):
-            node = node.nextSibling
-            continue
-
-        if (node.firstChild.nodeValue.lower() == 'pythonmodule'):
-            py_index_ = index_
-            break
-        index_ += 1
-        node = node.nextSibling
-        pass
-
-
-    if (py_index_ == -1):
-        print ('\nPythonModule - Not found!')
-        return False
-
-
-    # modify values
-    nodes = sm_doc.getElementsByTagName('Values')
-    node = nodes[0].firstChild
-    index_ = 0
-    while (node != None):
-        if (node.hasChildNodes() == False):
-            node = node.nextSibling
-            continue
-
-        if (index_ == py_index_):
-            node.firstChild.nodeValue = pyPath
-            break
-        index_ += 1
-        node = node.nextSibling
-        pass
-    # ends
-
-    # write updated
-    f = open(rftpath, 'w+')
-    f.write(sm_doc.toprettyxml())
-    f.close()
-    return True
-
-class AUXTable():
-    def __init__(self):
-        self.iCursor = None
-
-    def init(self, cfg_path, aux_output):
-
-        # parse in template to get fields info
-        try:
-            arcpy.AddMessage(str(cfg_path))
-            doc = minidom.parse(cfg_path)
-        except:
-            arcpy.AddMessage('failed to open the file' + str(cfg_path))
-        nodeName = 'Field'
-        parent_node = doc.getElementsByTagName(nodeName)
-
-        self.fld_info = {'field' : {'info' : {}}}
-        for n in parent_node:
-            try:
-                field_name = str(n.firstChild.nextSibling.firstChild.nodeValue)
-                if (field_name.lower() == 'dataset_id'):
-                    continue
-                self.fld_info['field']['info'][field_name] = {
-                'type' : n.firstChild.nextSibling.nextSibling.nextSibling.firstChild.nodeValue,
-                'len' : n.firstChild.nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.firstChild.nodeValue
-                }
-            except Exception as exp:
-                print str(exp)
-                return False
-        # ends
-
-        # let's create the table
-        self.aux_output = aux_output
-        try:
-            print ('Creating [%s]..' % self.aux_output)
-            (p, n) = os.path.split(self.aux_output)
-            arcpy.CreateTable_management(p, n)
-            for fld in self.fld_info['field']['info'].keys():
-                arcpy.AddField_management(self.aux_output, fld, self.fld_info['field']['info'][fld]['type'], '#', '#', self.fld_info['field']['info'][fld]['len'], '#')
-            print ('Done.')
-
-        except Exception as exp:
-            print ('Error: [%s]' % (str(exp)))
-            return False
-        # ends
-
-        try:
-            self.iCursor = arcpy.InsertCursor(self.aux_output)
-        except Exception as exp:
-            print ('Error: [%s]' % (str(exp)))
-            return False
-
-        return True
-
-
-    def close (self):
-        if (self.iCursor is not None):
-            del self.iCursor
-        try:
-            pass
-
-        except Exception as exp:
-            return False
-        return True
-
-
-
-    def insertRecord (self, record):
-
-        if (self.iCursor is None):
-            print ('Error: internal/insertRecord');
-            return False
-
-        if (record is None):
-            return False
-
-        if (('field' in record) == False):
-            return False
-
-        if (('info' in record['field']) == False):
-            return False
-
-        try:
-            row = self.iCursor.newRow()
-            for fld in record['field']['info']:
-                if (('value' in record['field']['info'][fld]) == False):
-                    continue
-                if (record['field']['info'][fld]['value'] is not None):
-                    try:
-                        row.setValue(fld, record['field']['info'][fld]['value'])
-                    except Exception as exp:
-                        print ('Warning: (insetRecord[%s], [%s])' % (fld, str(exp)))
-            self.iCursor.insertRow(row)
-        except Exception as exp:
-            print ('Err: [%s]' % str(exp))
-            return False
-        finally:
-            row = None
-            del row
-
-        return True
-
+import numpy as np
 
 class Toolbox(object):
     def __init__(self):
@@ -240,629 +29,379 @@ class Toolbox(object):
         self.alias = "wroservice"
 
         # List of tool classes associated with this toolbox
-        self.tools = [FeatureToRaster,ConfigureRasterFields,OptimizeRaster,BuildMosaic]
+        self.tools = [CreateWeightedOverlayMosaic,UpdateWROLayerInfo,UpdateWROClassification]
 
-class FeatureToRaster(object):
+class UpdateWROClassification(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Feature To Raster"
-        self.description = "Creates rasters (TIFs) from input features"
+        self.label = "Update WRO Layer Classification"
+        self.description = "Updates layer classification ranges in a weighted overlay mosaic."
         self.canRunInBackground = False
+        self.mo_flds = ["Title", "RangeLabels", "InputRanges", "OutputValues"]
+        #id = None
+        #raster_path = None
+        #min_val = None
+        #max_val = None
+
 
     def getParameterInfo(self):
         """Define parameter definitions"""
-
-        inFC = arcpy.Parameter(
-        displayName="Input Features",
-        name="inFC",
-        datatype="GPFeatureLayer",
+        in_mosaic = arcpy.Parameter(
+        displayName="Input Weighted Overlay Mosaic",
+        name="inMosaic",
+        datatype="DEMosaicDataset",
         parameterType="Required",
         direction="Input")
 
-        outputRaster = arcpy.Parameter(
-        displayName="Output Raster",
-        name="out_raster",
-        datatype="GPRasterLayer",#"DERasterDataset",
-        parameterType="Required",
-        direction="Output")
-
-        processname = arcpy.Parameter(
-        displayName="Process Name",
-        name="processname",
+        wro_lyr=arcpy.Parameter(
+        displayName="WRO Mosaic Layer",
+        name="in_mosaic_row",
         datatype="GPString",
         parameterType="Required",
         direction="Input")
-        processname.filter.type = "ValueList"
-        processname.filter.list = ['Present/Absent','KeyAttribute','Density','Distance']
+        wro_lyr.filter.type = "ValueList"
 
-        infield = arcpy.Parameter(
-            displayName="Field Name",
-            name="infield",
-            datatype="GpString",
-            parameterType="Required",
-            direction="Input")
-        infield.filter.type = "ValueList"
-
-        cellSize = arcpy.Parameter(
-        displayName="Cell Size",
-        name="cellSize",
-        datatype="GPDouble",
+        wro_title = arcpy.Parameter(
+        displayName="WRO Layer Title",
+        name="wroTitle",
+        datatype="GPString",
         parameterType="Required",
         direction="Input")
 
-        outputextent = arcpy.Parameter(
-        displayName="Output Extent",
-        name="outputextent",
-        datatype="GPExtent",
-        parameterType="Optional",
-        direction="Input")
-
-        snapraster = arcpy.Parameter(
-        displayName="Snap Raster",
-        name="snapraster",
-        datatype="GPRasterLayer",
-        parameterType="Optional",
-        direction="Input")
-
-        maskEnv = arcpy.Parameter(
-        displayName="Mask Output",
-        name="maskEnv",
-        datatype=["DERasterDataset", "DEFeatureClass"],
-        parameterType="Optional",
-        direction="Input")
-
-        searchradius = arcpy.Parameter(
-        displayName="Search Radius",
-        name="searchradius",
-        datatype= "GPDouble",
-        parameterType="Optional",
-        direction="Input")
-
-        params = [inFC,outputRaster,processname,cellSize,infield,outputextent,snapraster,maskEnv,searchradius]
-        return params
-
-    def isLicensed(self):
-        """Set whether tool is licensed to execute."""
-        return True
-
-    def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal
-        validation is performed.  This method is called whenever a parameter
-        has been changed."""
-        if parameters[2].altered and parameters[0].altered == True:
-            flist = arcpy.ListFields(parameters[0].valueAsText)
-            fieldList = []
-            for each in flist:
-                fieldList.append(each.name)
-
-            parameters[4].filter.list = fieldList
-            if parameters[2].valueAsText == 'Distance':
-                fdesc = arcpy.Describe(parameters[0].valueAsText)
-                parameters[4].value = str(fdesc.fields[0].name)
-                parameters[4].enabled = False
-            elif parameters[2].valueAsText == 'Present/Absent' or parameters[2].valueAsText == 'KeyAttribute' :
-                parameters[8].enabled = False
-                parameters[4].enabled = True
-            else:
-                parameters[4].enabled = True
-                parameters[8].enabled = True
-                fieldList.append("None")
-                parameters[4].filter.list = fieldList
-
-        return
-
-    def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool
-        parameter.  This method is called after internal validation."""
-
-        return
-
-    def execute(self, parameters, messages):
-        """The source code of the tool."""
-        if arcpy.CheckExtension("Spatial")!="Available":
-            arcpy.AddError("Spatial Analyst extension is not available")
-            return
-
-        arcpy.CheckOutExtension("Spatial")
-        pname = parameters[2].valueAsText
-        infc = parameters[0].valueAsText
-        outRaster = parameters[1].valueAsText
-        fieldName = parameters[4].valueAsText
-
-        if (fieldName is None):
-                fieldName = '#'
-
-        csize = parameters[3].valueAsText
-
-        # describe the input data to access input features' properties
-        desc=arcpy.Describe(infc)
-        if (desc.dataType=='FeatureClass' or desc.dataType=='ShapeFile'):
-            fcprop = arcpy.Describe(infc)
-        elif desc.dataType=='FeatureLayer':
-            fcprop = arcpy.Describe(infc).featureClass
-        else:
-            arcpy.AddError("{} is not a valid input feature type".format(infc))
-            return
-
-        shapeType = fcprop.shapeType
-        fcname = fcprop.name
-        fcwrks = fcprop.path
-        outextent = parameters[5].valueAsText
-
-        if (outextent is None):
-            outextent = "#"
-
-        if (outextent != '#'):
-            evalue = outextent.split(" ")
-            arcpy.env.extent = outextent
-
-        sraster = parameters[6].valueAsText
-        rmask = parameters[7].valueAsText
-        sRadius = parameters[8].valueAsText
-
-        env.workspace = fcwrks
-
-        if (sraster is None):
-            sraster = "#"
-        if (sraster != '#'):
-            arcpy.env.snapRaster = sraster
-
-        if (rmask is None):
-            rmask = "#"
-
-        if (rmask != '#'):
-            arcpy.env.mask = rmask
-
-        if (sRadius is None):
-            sRadius = "#"
-
-        # Process namem = density
-        if pname.lower() == 'density':
-
-            if shapeType.lower() == 'polyline':
-                arcpy.AddMessage("Line Density {} {} {} {}".format(infc, fieldName, csize, sRadius))
-                ldensity = LineDensity(infc,fieldName,csize,sRadius)
-                ldensity.save(outRaster)
-            elif shapeType.lower() == 'point':
-                arcpy.AddMessage("Point Density {} {} {}".format(infc,fieldName,csize))
-                pdensity = PointDensity(infc,fieldName,csize)
-                pdensity.save(outRaster)
-            else:
-                arcpy.AddError("Input Geomerty should be line or Point, Input shape is {}".format(shapeType.lower()))
-                return
-
-        # process name = distance
-        elif pname.lower() == 'distance':
-            previousmask = arcpy.env.mask
-            if rmask != "#":
-                arcpy.env.mask = rmask
-
-            try:
-                arcpy.AddMessage("Executing EucDistance {} # {}".format(infc, csize))
-                eucdist=EucDistance(infc,"#",csize)
-                eucdist.save(outRaster)
-                if arcpy.Exists(outRaster):
-                    arcpy.AddMessage("Saved new raster to {}".format(outRaster))
-                else:
-                    arcpy.AddMessage("Unable to find Output Raster {}".format(outRaster))
-            except Exception as e:
-                arcpy.AddError(e.message)
-                return
-
-            finally:
-                arcpy.GetMessages()
-                # reset the environment
-                arcpy.env.mask=previousmask
-
-
-        # process name = key attribute or present/absent
-        elif pname.lower() == 'keyattribute' or pname.lower() == 'present/absent':
-
-            if shapeType.lower() == 'polyline':
-                arcpy.AddMessage("Polyline To Raster {} {} {} {} {} {}".format(infc,fieldName,outRaster,"#","#",csize))
-                arcpy.PolylineToRaster_conversion(infc,fieldName,outRaster,"#","#",csize)
-            elif shapeType.lower() == 'polygon':
-                arcpy.AddMessage("Polygon To Raster {} {} {} {} {} {}".format(infc,fieldName,outRaster,"CELL_CENTER","#",csize))
-                arcpy.PolygonToRaster_conversion(infc,fieldName,outRaster,"CELL_CENTER","#",csize)
-            else:
-                arcpy.AddError("Input Geomerty should be line or Polygon, Input shape is " + str (shapeType.lower()))
-                return
-        else:
-            arcpy.AddMessage("Invalid Process Name")
-        return
-
-
-class ConfigureRasterFields(object):
-    in_ras = ''
-    def __init__(self):
-        """Define the tool (tool name is the name of the class)."""
-        self.label = "Configure Raster Fields"
-        self.description = "Creates data for fields in the weighted overlay service's mosaic dataset."
-        self.canRunInBackground = False
-        self.mkey ={}
-#        self.in_ras = ""
-
-    def getParameterInfo(self):
-        """Define parameter definitions"""
-
-        inRaster = arcpy.Parameter(
-        displayName="Input Raster",
-        name="inRaster",
-        datatype="GPRasterLayer",#"DERasterDataset",
+        mosaic_lyr_data = arcpy.Parameter(
+        displayName="Mosaic Layer Data",
+        name="mosaicLayerData",
+        datatype="GPValueTable",
         parameterType="Required",
         direction="Input")
+        mosaic_lyr_data.columns = [['GPString','Range Label'],['GPDouble', 'Min Range'], ['GPDouble', 'Max Range'],['GPLong', 'Suitability Value']]
+        mosaic_lyr_data.filters[3].type = "ValueList"
+        mosaic_lyr_data.filters[3].list = [0,1,2,3,4,5,6,7,8,9]
 
-        title = arcpy.Parameter(
-        displayName="Title",
-        name="Title",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        rdescription = arcpy.Parameter(
-        displayName="Description",
-        name="Description",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        metadata = arcpy.Parameter(
-        displayName="Metadata",
-        name="Metadata",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        url = arcpy.Parameter(
-        displayName="URL",
-        name="url",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        ## unused
-##        disporder = arcpy.Parameter(
-##        displayName="Display Order",
-##        name="DisplayOrder",
-##        datatype="GPDouble",
-##        parameterType="Optional",
-##        direction="Input")
-
-##        mmr = arcpy.Parameter(
-##        displayName="Min Max Range",
-##        name="MinMaxRange",
-##        datatype="GPString",
-##        parameterType="Optional",
-##        direction="Input")
-        ##
-
-        inputRanges = arcpy.Parameter(
-        displayName="Input Ranges",
-        name="InputRanges",
-        datatype="GPString",#"DERasterDataset",
-        parameterType="Optional",
-        direction="Input")
-
-        outputValues = arcpy.Parameter(
-        displayName="Output Values",
-        name="OutPutValues",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        noDataRanges = arcpy.Parameter(
-        displayName="NoData Ranges",
-        name="NoDataRanges",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        rangeLabels = arcpy.Parameter(
-        displayName="Range Labels",
-        name="RangeLabels",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        noDataRangeLabels = arcpy.Parameter(
-        displayName="NoData Range Labels",
-        name="NoDataRangeLabels",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
-        ## derived output param
-        ## same as input raster
-        outRaster = arcpy.Parameter(
-        displayName="Output Raster",
-        name="outRaster",
-        datatype="GPRasterLayer",
+        out_mosaic=arcpy.Parameter(
+        displayName="Output Mosaic Dataset",
+        name="outMosaic",
+        datatype="DEMosaicDataset",
         parameterType="Derived",
         direction="Output")
-        outRaster.parameterDependencies=[inRaster.name]
 
-        # params = [inRaster,title,rdescription,metadata,url,disporder,inputRanges,outputValues,noDataRanges,rangeLabels,noDataRangeLabels,mmr] # unused
-        params = [inRaster,title,rdescription,metadata,url,inputRanges,outputValues,noDataRanges,rangeLabels,noDataRangeLabels,outRaster]
+        out_mosaic.parameterDependencies=[in_mosaic.name]
+        out_mosaic.schema.clone=True
+
+        params = [in_mosaic ,wro_lyr, wro_title, mosaic_lyr_data, out_mosaic]
+
         return params
 
     def isLicensed(self):
         """Set whether tool is licensed to execute."""
         return True
 
+
     def updateParameters(self, parameters):
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
-        inras = parameters[0].valueAsText
-        if parameters[0].altered:
-            inras = arcpy.Describe(parameters[0].value).catalogPath
+        if parameters[0].value:
 
-        if inras != ConfigureRasterFields.in_ras:
+            # Get list of layer names and populate WRO Mosaic Layer param
+            names = []
+            with arcpy.da.SearchCursor(parameters[0].value, "Name") as cur:
+                for row in cur:
+                    names.append(row[0])
+            parameters[1].filter.list = names
 
-            ConfigureRasterFields.in_ras = inras
+            if not parameters[1].hasBeenValidated and parameters[1].altered:
+                # Clear other params
+                parameters[2].value = None
+                parameters[3].value = None
+                parameters[4].value = None
+                #parameters[5].value = None
 
-            inaux = str(inras) + '.aux.wo.xml'
-            if os.path.exists(inaux) == True:
+                # Check for required mosaic dataset fields
+                missing_flds = []
+                fld_list = [fld.name for fld in arcpy.ListFields(parameters[0].value)]
+                for fld in self.mo_flds:
+                    if fld not in fld_list:
+                        missing_flds.append(fld)
+                # If any fields are missing, show them in an error message
+                if missing_flds:
+                    parameters[0].setErrorMessage("Missing fields {} in {}".format(missing_flds, parameters[0].valueAsText))
+                    return
 
-                doc = minidom.parse(inaux)
-                self.mkey ={}
-                key = "Description"
-                mlist = doc.getElementsByTagName("Metadata")
-                i = 0
 
-                for each in mlist:
-                    if str(mlist[i].parentNode.nodeName).lower() == 'pamdataset':
-                        if mlist[i].hasChildNodes() == True:
-                            ns = mlist[i].firstChild.nextSibling
+                # Get Layer Title and Mosaic Layer Data values for user-selected Mosaic Layer (param 1)
+                if parameters[1].value: # and parameters[1].altered:
+                    where = "Name = '" + parameters[1].valueAsText + "'"
+                    ##["Title", "RangeLabels", "InputRanges", "OutputValues"]
+                    with arcpy.da.SearchCursor(parameters[0].value, ["Title", "OID@", "RangeLabels", "InputRanges", "OutputValues"], where) as cur:
+                        row = cur.next()
+                        global id
+                        id = row[1]
+                        self._labels = row[2]
+                        self._ranges = row[3]
+                        self._output_values = row[4]
 
-                            while (ns != None):
-                                if (not ns.firstChild is None):
-                                    self.mkey[ns.firstChild.parentNode.attributes.item(0).value] = ns.firstChild.nodeValue
+                        if row[0]:
+                            parameters[2].value = row[0]
+                        if row[2]:
+                            label_list = row[2].split(",")
+                        if row[3]:
+                            range_list = row[3].split(",")
+                        if row[4]:
+                            suitability_list = row[4].split(",")
 
-                                ns = ns.nextSibling.nextSibling
-                    i = i+1
-                for eachp in parameters:
-                    if eachp.name == 'inRaster':
-                        continue
-                    valu = ''
-                    if self.mkey.has_key(eachp.name):
-                        valu = self.mkey[eachp.name]
+                    # Write values to UI value table
+                    out_values = ""
+                    for i in range(len(label_list)):
+                        out_values += ('"{}" {} {} {} {}').format(label_list[i], range_list[i*2], range_list[i*2+1], suitability_list[i], ";")
 
-                    eachp.value = valu
-            else:
-                for eachvalue in parameters:
-                    if eachvalue.name == 'inRaster':
-                        continue
-                    valu = ''
-                    eachvalue.value = valu
+                    #parameters[5].value = out_values
+                    parameters[3].value = out_values
+
 
         return
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter.  This method is called after internal validation."""
-
-        rng=str(parameters[5].value)
-        inRng=rng.split(",")
-        outRng=[]
-
-        # Input range validation
-        if (parameters[5].value):
-            # Input range should be comma delimited
-            if rng.find(",")==-1:
-                parameters[5].setWarningMessage("Invalid format: Input ranges "
-                    "must be in min-inclusive, max-exclusive ordering and be "
-                    "delimited by commas. For example: 1,2,2,3,3,4.")
-            # Input range should not allow doubles/floats
-            elif rng.find(".")>-1:
-                parameters[5].setWarningMessage("Invalid format: Input ranges "
-                    "must integers in min-inclusive, max-exclusive ordering and be "
-                    "delimited by commas. For example: 1,2,2,3,3,4.")
-            # len input range should be even
-            elif len(inRng) % 2 != 0:
-                parameters[5].setWarningMessage("Invalid format: Input ranges "
-                    "should be in min-inclusive, max-exclusive ordering. "
-                    "There should be an even number of values in this range")
+        # Check for required mosaic dataset fields
+        if parameters[0].value and not parameters[0].hasBeenValidated:
+            missing_flds = []
+            fld_list = [fld.name for fld in arcpy.ListFields(parameters[0].value)]
+            for fld in self.mo_flds:
+                if fld not in fld_list:
+                    missing_flds.append(fld)
+            # If any fields are missing, show them in an error message
+            if missing_flds:
+                parameters[0].setErrorMessage("Missing fields {} in {}".format(missing_flds, parameters[0].valueAsText))
 
 
-        if (parameters[5].value and parameters[6].value):
-
-            outRng=str(parameters[6].value)
-            # If there are 2 input range values, there should be 1 output value
-            noCommasOutRangeAndNotValid=(len(outRng.split(","))==1 and len(inRng)!=2)
-
-            if noCommasOutRangeAndNotValid:
-                parameters[6].setWarningMessage("Invalid format: "
-                    "Input ranges should have 2 entries if output values have 1")
-            elif ((noCommasOutRangeAndNotValid and outRng.find(",")==-1)):
-                parameters[6].setWarningMessage("Invalid format: Output ranges "
-                    "must be integers delimited by commas. For example: 1,2,3,4,5.")
-            elif outRng.find(".")>-1:
-                parameters[6].setWarningMessage("Invalid format: Output ranges "
-                    "must be integers delimited by commas. For example: 1,2,3,4,5.")
-
-            # input ranges should be 2x longer than output ranges
-            outRng=str(parameters[6].value).split(",")
-            if (len(outRng) * 2) != len(inRng):
-                if len(parameters[6].message)>0:
-                    msg="{}".format(parameters[6].message)
-                    parameters[6].setWarningMessage("{} - {}".format(msg,"Invalid format: Input ranges should have twice as many entries as output"))
-                else:
-                    parameters[6].setWarningMessage("Invalid format: "
-                        "Input ranges should have twice as many entries as output")
+        # Verify max value of range matches min value of next range
+        if parameters[3].value:
+            range_list = []
+            #for val in parameters[5].value:
+            for val in parameters[3].value:
+                range_list.append(val[1])
+                range_list.append(val[2])
+            count = 1
+            while count < (len(range_list) - 1):
+                min = range_list[count]
+                max = range_list[count + 1]
+                if min != max:
+                    #parameters[5].setErrorMessage("Range values mismatch: " + str(min) + " and " + str(max))
+                    parameters[3].setErrorMessage("Range values mismatch: " + str(min) + " and " + str(max))
+                    break
+                count += 2
 
         return
+
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-#        inRaster = parameters[0].valueAsText
-        inRaster = arcpy.Describe(parameters[0].value).catalogPath
-        auxxml = str(inRaster) + '.aux.wo.xml'
-        arcpy.AddMessage(auxxml)
-        ptitle = parameters[1].valueAsText
-        pdescription = parameters[2].valueAsText
-        pmetadata = parameters[3].valueAsText
-        purl = parameters[4].valueAsText
-#        pdisporder = parameters[5].valueAsText
-        pinputRangers  = parameters[5].valueAsText
-        poutputValues = parameters[6].valueAsText
-        pnodataRanges = parameters[7].valueAsText
-        prangeLabels = parameters[8].valueAsText
-        pnodataRangeLabels = parameters[9].valueAsText
-#        pmmcr = parameters[11].valueAsText
-#        puplist = [ptitle, pdescription, pmetadata, purl,pdisporder, pinputRangers, poutputValues,pnodataRanges,prangeLabels,pnodataRangeLabels,pmmcr]#,colormapValue,colormapFileName]
-        puplist = [ptitle, pdescription, pmetadata, purl,pinputRangers, poutputValues,pnodataRanges,prangeLabels,pnodataRangeLabels]#,colormapValue,colormapFileName]
-#        sNNL = ['<MDI key="Title">','<MDI key="Description">', '<MDI key="Metadata">','<MDI key="url">', '<MDI key="DisplayOrder">','<MDI key="InputRanges">','<MDI key="OutPutValues">','<MDI key="NoDataRanges">','<MDI key="RangeLabels">','<MDI key="NoDataRangeLabels">','<MDI key="MinMaxRange">']#,'<MDI key="colormapValue">','<MDI key="colormapFileName">']
-        sNNL = ['<MDI key="Title">','<MDI key="Description">', '<MDI key="Metadata">','<MDI key="url">', '<MDI key="InputRanges">','<MDI key="OutPutValues">','<MDI key="NoDataRanges">','<MDI key="RangeLabels">','<MDI key="NoDataRangeLabels">']#,'<MDI key="colormapValue">','<MDI key="colormapFileName">']
-        eNNL = ['</MDI>','</MDI>', '</MDI>', '</MDI>','</MDI>','</MDI>','</MDI>','</MDI>','</MDI>']#,'</MDI>','</MDI>']
-        buff = []
+        # Read parameters from UI
+        mosaic_dataset = parameters[0].value
+        name = parameters[1].valueAsText
+        title = parameters[2].valueAsText
+        value_tbl = parameters[3].value
 
-        try:
-            if os.path.exists(auxxml) == True:
-                auxExist = True
-                new_buffer = []
-                f = open(auxxml)
-                org_buffer = f.readlines()
-                for i in range (0, len(org_buffer)):
-                    ln = org_buffer[i].strip()
-                    if (ln == ''): continue;
-                    print ln
-                    new_buffer.append(org_buffer[i])
-                f.close()
-                buff = new_buffer
-            else:
-                auxExist = False
-                buff.insert(0,'%s\n'% '<PAMDataset>')
-                buff.insert(1,'%s\n'% '<Metadata>')
-                buff.insert(2,'%s\n'% '</Metadata>')
-                buff.insert(3,'%s\n'% '</PAMDataset>')
-        except Exception as inf:
-            arcpy.AddMessage(str(inf))
-            return False
+        # Where clause
+        where = "Name = '" + name + "'"
+
+        # Read values from value table
+        ranges = ""
+        range_labels = ""
+        output_values = ""
+        for val in value_tbl:
+            ranges += str(val[1]) + "," + str(val[2]) + ","
+            range_labels += str(val[0]) + ","
+            output_values += str(val[3]) + ","
+        ranges = ranges[:-1]
+        range_labels = range_labels[:-1]
+        output_values = output_values[:-1]
+
+        # Check for user changes
+        changes = False
+
+        # also get oid of selected row in the mosaic
+        id=-1
+        fields=list(self.mo_flds)
+        fields.append("OID@")
+
+        ##field=["Title", "RangeLabels", "InputRanges", "OutputValues","OID@"]
+        with arcpy.da.SearchCursor(mosaic_dataset, fields, where) as cur:
+            row = cur.next()
+            if title != row[0]:
+                changes = True
+                arcpy.AddMessage("Title:")
+                arcpy.AddMessage("\tOriginal: " + row[0])
+                arcpy.AddMessage("\tNew: " + title)
+            if range_labels != row[1].replace(", ", ","):
+                changes = True
+                arcpy.AddMessage("Range Labels:")
+                self.showMessages(row[1],range_labels)
+            if ranges != row[2]:
+                changes = True
+                arcpy.AddMessage("InputRanges:")
+                self.showMessages(row[2],ranges)
+            if output_values != row[3]:
+                changes = True
+                arcpy.AddMessage("OutputValues:")
+                self.showMessages(row[3],output_values)
+            id=row[4]
 
 
-        inline = ""
-        tempbuff = buff
-#        if os.path.exists(auxxml) == True:
-        for q in range (0,  len(puplist)):
-            j = 0
-            if str(puplist[q]) == 'None':
-                puplist[q] = ''
-            for mtag in tempbuff:
-                j = j+1
-                if mtag.lower().find(str(sNNL[q]).lower()) >= 0:
-                    print (str(sNNL[q]).lower())
-                    del buff[j-1]
-                    break
+        # Update Mosaic Dataset table with values from tool UI
+        if changes:
+            if title == "":
+                title = None
 
-            inline = inline + (sNNL[q]) + str(puplist[q]) + str(eNNL[q]) + '\n' + '\t\t'
+            # Validate dataset min-max against value table
+            # Export the mosaic's raster datasets paths
+            raster_tbl = os.path.join("in_memory", "raster_paths")
+            if arcpy.Exists(raster_tbl):
+                arcpy.Delete_management(raster_tbl)
 
-        i = 0
-        mpresent = False
-        in_indx = 0
-        for fnd in buff:
+            arcpy.ExportMosaicDatasetPaths_management(parameters[0].value, raster_tbl)
 
-            if (fnd.lower().find('<metadata>') >= 0):
-                if (str(buff[i-1]).lower().find('<pamdataset>') >= 0):
-                    in_indx = i
-                    break;
-            i = i+1
+            # where clause to search table by id from mosaic
+            where1 = "SourceOID = " + str(id)
 
-        if in_indx == 0:
-            buff.insert(1,'%s\n'%'<Metadata>')
-            buff.insert(2,'%s\n'%'</Metadata>')
-            arcpy.AddMessage("adding Metadata Node")
-            in_indx = in_indx + 1
+            arcpy.AddMessage("Querying {} using ID={}".format(raster_tbl,id))
+            min_val = -1
+            max_val = -1
+            raster_path = ""
 
-        in_buff = inline
-        in_indx = in_indx + 1
-        buff.insert(in_indx, '  %s\n' % (in_buff))
-        arcpy.AddMessage(str(inline))
+            # query the exported table to get the dataset's min/max value
+            with arcpy.da.SearchCursor(raster_tbl, ["Path"], where1) as cur:
+                for row in cur:
+                    raster_path = row[0]
+                    if arcpy.Exists(raster_path):
+                        # Get min/max values
+                        min_val = float(arcpy.GetRasterProperties_management(raster_path, "MINIMUM").getOutput(0))
+                        max_val = float(arcpy.GetRasterProperties_management(raster_path, "MAXIMUM").getOutput(0))
 
-        # let's write out the updated file.
-        try:
-            if auxExist == True:
-                os.remove (auxxml)
 
-            f = open(auxxml, 'w')
-            f.writelines(buff)
-            f.close()
+            # compare to value table
+            arcpy.AddMessage("Min-Max Values from dataset {} are {}-{}".format(raster_path,min_val,max_val))
+            if str(value_tbl[0][1]) != str(min_val):
+                value_tbl[0][1] = min_val
+                arcpy.AddWarning("Set minimum range value to minimum cell value")
+            elif float(value_tbl[-1][2]) <= float(max_val):
+                arcpy.AddError("Maximum range value {} must be larger than maximum cell value {}".format(value_tbl[-1][2],max_val))
+                return
 
-        except Exception as inf:
-            arcpy.AddMessage(str(inf))
-            return False
+            # Update record with user-defined values
+            ##["Title", "RangeLabels", "InputRanges", "OutputValues"]
+            with arcpy.da.UpdateCursor(mosaic_dataset, self.mo_flds, where) as cur:
+                for row in cur:
+                    try:
+                        row = (title, range_labels, ranges, output_values)
+                        cur.updateRow(row)
+                    except Exception as eIns:
+                        arcpy.AddWarning("An error occurred while updating the mosaic: " + this.GetErrorMessage(eIns))
+
+
+        else:
+            arcpy.AddMessage("No changes found")
 
         return
 
-class OptimizeRaster(object):
+    def showMessages(this,rowByIdx,paramTitle):
+        if rowByIdx is None:
+            arcpy.AddMessage("\tOriginal: Empty")
+        else:
+            arcpy.AddMessage("\tOriginal: " + rowByIdx)
+
+        if paramTitle is None:
+            arcpy.AddMessage("\tNew: Empty")
+        else:
+            arcpy.AddMessage("\tNew: " + paramTitle)
+
+        return
+
+class UpdateWROLayerInfo(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Optimize Raster"
-        self.description = ""
+        self.label = "Update WRO Layer Info"
+        self.description = "Lets you add descriptive information to a layer in your WRO Mosaic."
         self.canRunInBackground = False
+        self.mo_flds = ["Title", "Description", "Url", "Metadata", "NoDataRanges", "NoDataRangeLabels"]
+
 
     def getParameterInfo(self):
         """Define parameter definitions"""
-
-        opInRaster = arcpy.Parameter(
-        displayName="Input Raster",
-        name="opInRaster",
-        datatype="GPRasterLayer",#"DERasterDataset",
+        in_mosaic = arcpy.Parameter(
+        displayName="Input Weighted Overlay Mosaic",
+        name="inMosaic",
+        datatype="DEMosaicDataset",
         parameterType="Required",
         direction="Input")
 
-
-        opOutputExtent = arcpy.Parameter(
-        displayName="Output Extent",
-        name="outputextent",
-        datatype="GPExtent",
-        parameterType="Optional",
-        direction="Input")
-
-        opOutRaster = arcpy.Parameter(
-        displayName="Output Raster",
-        name="opOutRaster",
-        datatype="GPRasterLayer",#"DERasterDataset",
-        parameterType="Required",
-        direction="Output")
-
-
-        opinTrueRaster = arcpy.Parameter(
-        displayName="Input True Raster or a numeric constant",
-        name="opinTrueRaster",
-        datatype=["GPRasterLayer","GPString"],#"DERasterDataset",
-        parameterType="Required",
-        direction="Input")
-#        opinTrueRaster.value = 'None'
-
-        opinFalseRaster = arcpy.Parameter(
-        displayName="Input False Raster or Constant",
-        name="opinFalseRaster",
-        datatype=["GPRasterLayer","GPString"],#"DERasterDataset",
-        parameterType="Required",
-        direction="Input")
-        opinFalseRaster.value = 'None'
-#        opinFalseRaster.enabled = False
-
-        opprocessname = arcpy.Parameter(
-        displayName="Process Name",
-        name="opprocessname",
+        wro_lyr=arcpy.Parameter(
+        displayName="WRO Mosaic Layer",
+        name="in_mosaic_row",
         datatype="GPString",
         parameterType="Required",
         direction="Input")
-        opprocessname.filter.type = "ValueList"
-        opprocessname.filter.list = ['Filling Gaps','Remove Extraneous Zeros']
-#        opprocessname.value = 'Filling Gaps'
 
+        wro_lyr.filter.type = 'ValueList'
 
-        opexpression = arcpy.Parameter(
-        displayName="Where Clause",
-        name="opexpression",
-        datatype="GPString",#GPSQLExpression",#"DERasterDataset",
+        wro_title = arcpy.Parameter(
+        displayName="WRO Layer Title",
+        name="wroTitle",
+        datatype="GPString",
+        parameterType="Required",
+        direction="Input")
+
+        wro_lyr_desc = arcpy.Parameter(
+        displayName="WRO Layer Description",
+        name="wroLayerDescription",
+        datatype="GPString",
         parameterType="Optional",
+        direction="Input")
+
+        wro_lyr_preview_url=arcpy.Parameter(
+        displayName="WRO Layer Preview URL",
+        name="wroLayerPreviewURL",
+        datatype="GPString",
+        parameterType="Optional",
+        direction="Input")
+
+        wro_lyr_info_url=arcpy.Parameter(
+        displayName="WRO Layer Informational URL",
+        name="wroLayerInfoURL",
+        datatype="GPString",
+        parameterType="Optional",
+        direction="Input")
+
+        wro_lyr_no_data_ranges=arcpy.Parameter(
+        displayName="WRO Layer NoData Value",
+        name="wroLayerNoDataRanges",
+        datatype="GPDouble",
+        parameterType="Optional",
+        direction="Input")
+
+        # Cam: change to NoData Label instead of No Data Labels?
+        wro_lyr_no_data_range_labels=arcpy.Parameter(
+        displayName="WRO Layer NoData Label",
+        name="wroLayerNoDataRangeLabels",
+        datatype="GPString",
+        parameterType="Optional",
+        direction="Input")
+
+        out_mosaic=arcpy.Parameter(
+        displayName="Output Mosaic Dataset",
+        name="outMosaic",
+        datatype="DEMosaicDataset",
+        parameterType="Derived",
         direction="Output")
 
-        params = [opInRaster,opprocessname,opOutRaster,opinTrueRaster,opinFalseRaster,opOutputExtent,opexpression]
+        out_mosaic.parameterDependencies=[in_mosaic.name]
+        out_mosaic.schema.clone=True
+
+        params = [in_mosaic ,wro_lyr, wro_title, wro_lyr_desc, wro_lyr_preview_url,
+                  wro_lyr_info_url, wro_lyr_no_data_ranges, wro_lyr_no_data_range_labels, out_mosaic]
+
         return params
 
     def isLicensed(self):
@@ -873,114 +412,207 @@ class OptimizeRaster(object):
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
+        if parameters[0].value:
+            # clear the params
+            if parameters[0].altered and not parameters[0].hasBeenValidated:
+                parameters[1].value = None
+                parameters[2].value = None
+                parameters[3].value = None
+                parameters[4].value = None
+                parameters[5].value = None
+                parameters[6].value = None
+                parameters[7].value = None
 
-        if parameters[3].altered == True:
-            input_true_raster_val  = parameters[3].valueAsText
-            if (input_true_raster_val is not None and
-                input_true_raster_val != ''):
+            # Get list of layer names and populate WRO Mosaic Layer param
+            names = []
+            with arcpy.da.SearchCursor(parameters[0].value, "Name") as cur:
+                for row in cur:
+                    names.append(row[0])
+            parameters[1].filter.list = names
 
-                if (arcpy.Exists(input_true_raster_val) == False):
-                    if (input_true_raster_val.isnumeric() == False):
-                        parameters[3].value = ''
+            if parameters[1].altered and not parameters[1].hasBeenValidated:
+                # Check for required mosaic dataset fields
+                missing_flds = []
+                fld_list = [fld.name for fld in arcpy.ListFields(parameters[0].value)]
+                for fld in self.mo_flds:
+                    if fld not in fld_list:
+                        missing_flds.append(fld)
+                # If any fields are missing, show them in an error message
+                if missing_flds:
+                    parameters[0].setErrorMessage("Missing fields {} in {}".format(missing_flds, parameters[0].valueAsText))
+                    return
+
+                # clear the params
+                parameters[2].value = None
+                parameters[3].value = None
+                parameters[4].value = None
+                parameters[5].value = None
+                parameters[6].value = None
+                parameters[7].value = None
 
 
-        if parameters[1].altered == True:
-            pname = parameters[1].valueAsText
-            if pname.lower() == 'remove extraneous zeros':
+                # Get Layer Title and Mosaic Layer Data values for user-selected Mosaic Layer (param 1)
+                if parameters[1].value:
+                    where = "Name = '" + parameters[1].valueAsText + "'"
+                    ##["Title", "Description", "Url", "Metadata", "NoDataRanges", "NoDataRangeLabels"]
+                    with arcpy.da.SearchCursor(parameters[0].value, self.mo_flds, where) as cur:
+                        row = cur.next()
+##                        self._title = row[0]
+##                        self._description = row[1]
+##                        self._url = row[2]
+##                        self._metadata = row[3]
+##                        self._no_data_ranges = row[4]
+##                        self._no_data_range_labels = row[5]
 
-#                parameters[3].value = "None"
-                parameters[3].enabled = False
-                parameters[3].value = "None"
-                if parameters[4].value == "None":
-                        parameters[4].value = ""
-            else:
-#                parameters[4].value = "None"
-                parameters[3].enabled = True
-                if parameters[4].value == "" or parameters[4].value == None:
-                        parameters[4].value = "None"
+                        if row[0]:
+                            parameters[2].value = row[0]
+                        if row[1]:
+                            parameters[3].value = row[1]
+                        if row[2]:
+                            parameters[4].value = row[2]
+                        if row[3]:
+                            parameters[5].value = row[3]
+                        if row[4]:
+                            try:
+                                   parameters[6].value = row[4].split(",")[0]
+                            except:
+                                   parameters[6].value = None
+                        if row[5]:
+                            parameters[7].value = row[5]
 
         return
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter.  This method is called after internal validation."""
+
+        # Check urls
+        if parameters[4].value:
+            if not parameters[4].valueAsText.lower().startswith("http://") and not parameters[4].valueAsText.lower().startswith("https://"):
+                parameters[4].setErrorMessage("Url must begin with http:// or https://")
+
+        if parameters[5].value:
+            if not parameters[5].valueAsText.lower().startswith("http://") and not parameters[5].valueAsText.lower().startswith("https://"):
+                parameters[5].setErrorMessage("Url must begin with http:// or https://")
+
+        if parameters[6].value and (not isinstance(parameters[6].value, float)):
+            parameters[6].setErrorMessage("NoData Value must be a number.")
+
         return
+
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-        arcpy.CheckOutExtension("Spatial")
-        opinraster = parameters[0].valueAsText
-        opprocessname = parameters[1].valueAsText
-        opextent = str(parameters[5].valueAsText)
-        opoutraster = parameters[2].valueAsText
-        opintrueR = parameters[3].valueAsText
-        opinfalseR = str(parameters[4].valueAsText)
-        opexpression = parameters[6].valueAsText
-        env.workspace = os.path.dirname(opinraster)
-        rname = os.path.basename(opinraster)
-        if opintrueR == "None":
-                opintrueR = "#"
+        # Read parameters from UI
+        mosaic_dataset = parameters[0].value
+        name = parameters[1].valueAsText
+        title = parameters[2].valueAsText
+        description = parameters[3].valueAsText
+        url = parameters[4].valueAsText
+        metadata = parameters[5].valueAsText
+        #no_data_ranges = parameters[6].valueAsText
+        if parameters[6].value:
+             no_data_ranges = str(parameters[6].valueAsText) + "," + str(parameters[6].valueAsText)
         else:
-            if arcpy.Exists(opintrueR) == False:
-                arcpy.AddMessage("it's a constant")
-                opintrueR = int(opintrueR)
+             no_data_ranges = None
+        no_data_range_labels = parameters[7].valueAsText
 
-        if opinfalseR == "None":
-                opinfalseR = "#"
+        # Where clause
+        where = "Name = '" + name + "'"
+
+        # Check for user changes
+        changes = False
+        ##["Title", "Description", "Url", "Metadata", "NoDataRanges", "NoDataRangeLabels"]
+        with arcpy.da.SearchCursor(mosaic_dataset, self.mo_flds, where) as cur:
+            row = cur.next()
+            if title != row[0]:
+                changes = True
+                arcpy.AddMessage("Title:")
+                arcpy.AddMessage("\tOriginal: " + row[0])
+                arcpy.AddMessage("\tNew: " + title)
+            if description != row[1]:
+                changes = True
+                arcpy.AddMessage("Description:")
+                self.showMessages(row[1],description)
+            if url != row[2]:
+                changes = True
+                arcpy.AddMessage("Url:")
+                self.showMessages(row[2],url)
+            if metadata != row[3]:
+                changes = True
+                arcpy.AddMessage("Metadata:")
+##                arcpy.AddMessage("\tOriginal: " + row[3])
+##                arcpy.AddMessage("\tNew: " + metadata)
+                self.showMessages(row[3],metadata)
+            if no_data_ranges != row[4]:
+                changes = True
+                arcpy.AddMessage("NoDataValue:")
+##                arcpy.AddMessage("\tOriginal: " + row[4])
+##                arcpy.AddMessage("\tNew: " + no_data_ranges)
+                self.showMessages(row[4],no_data_ranges)
+            if no_data_range_labels != row[5]:
+                changes = True
+                arcpy.AddMessage("NoDataLabel:")
+##                arcpy.AddMessage("\tOriginal: " + row[5])
+##                arcpy.AddMessage("\tNew: " + no_data_range_labels)
+                self.showMessages(row[5],no_data_range_labels)
+
+        # Update Mosaic Dataset table with values from tool UI
+        if changes:
+            if title == "":
+                title = None
+            if description == "":
+                description = None
+            if url == "":
+                url = None
+            if metadata == "":
+                url = None
+            if no_data_ranges == "":
+                no_data_ranges = None
+            if no_data_range_labels == "":
+                no_data_range_labels = None
+
+            # Update record with user-defined values
+            ##["Title", "Description", "Url", "Metadata", "NoDataRanges", "NoDataRangeLabels"]
+            with arcpy.da.UpdateCursor(mosaic_dataset, self.mo_flds, where) as cur:
+                for row in cur:
+                    row = (title, description, url, metadata, no_data_ranges, no_data_range_labels)
+                    cur.updateRow(row)
         else:
-            if arcpy.Exists(opinfalseR) == False:
-                arcpy.AddMessage("it's a constant")
-                opinfalseR = int(opinfalseR)
-        arcpy.AddMessage(opextent)
+            arcpy.AddMessage("No changes found")
 
-        if opextent != "None":
-            opevalue = opextent.split(" ")
-            arcpy.env.extent = opextent
+        return
 
-        if opprocessname.lower() == 'remove extraneous zeros':
-            #env.workspace = os.path.dirname(opinraster)
-            outprez = SetNull(rname,opinfalseR,opexpression)
-            outprez.save(opoutraster)
-            arcpy.AddMessage(arcpy.GetMessages())
-        elif opprocessname.lower() == 'filling gaps':
-##            if opinfalseR == "None":
-##                opinfalseR = "#"
-##            if os.path.isfile(opintrueR) == False:
-##                arcpy.AddMessage("its a constant")
-##                opintrueR = int(opintrueR)
-            outfg = Con(IsNull(rname),opintrueR,opinfalseR,opexpression)
-            outfg.save(opoutraster)
-            arcpy.AddMessage(arcpy.GetMessages())
+    def showMessages(this,rowByIdx,paramTitle):
+        if rowByIdx is None:
+            arcpy.AddMessage("\tOriginal: Empty")
+        else:
+            arcpy.AddMessage("\tOriginal: " + rowByIdx)
 
+        if paramTitle is None:
+            arcpy.AddMessage("\tNew: Empty")
+        else:
+            arcpy.AddMessage("\tNew: " + paramTitle)
 
         return
 
 
-class BuildMosaic(object):
+class CreateWeightedOverlayMosaic(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Build Mosaic Dataset"
-        self.description = ""
+        self.label = "Create Weighted Overlay Mosaic"
+        self.description = "Creates a new mosaic dataset that you can use to share as a weighted raster overlay service on ArcGIS Online or your portal."
+        self.description += "The output mosaic dataset contains the raster layers in the input map document."
         self.canRunInBackground = False
+        self.inTableSchema=["title","rasterPath","Label","minRangeValue","maxRangeValue","SuitabilityVal","Description","NoDataVal","NoDataLabel","URL"]
+        self.outMoFields=[('Title','String',50),('Description','String',1024),('Url','String',1024),('InputRanges','String',2048),('NoDataRanges','String',256),('RangeLabels','String',1024),('NoDataRangeLabels','String',1024),('OutputValues','String',256),('Metadata','String',1024),('dataset_id','String',50)]
+        self.updMoFields=["Title","RangeLabels","InputRanges","OutputValues"]
+        self.updMoFieldsQuery=["Name"]
+        self.rasterType='Raster Dataset'
+        self.resampling='NEAREST'
 
     def getParameterInfo(self):
         """Define parameter definitions"""
-
-        inMXD = arcpy.Parameter(
-        displayName="Map Document or Folder",
-        name="inMXD",
-        datatype=["DEMapDocument","DEWorkspace"],#"DERasterDataset",
-        parameterType="Required",
-        direction="Input")
-
-        # unused
-##        md_name = arcpy.Parameter(
-##        displayName="Mosaic Dataset",
-##        name="md_name",
-##        #datatype=["DEMosaicDataset","GPMosaicLayer"],
-##        datatype="GPMosaicLayer",
-##        parameterType="Required",
-##        direction="Input")
 
         in_workspace = arcpy.Parameter(
         displayName="Output Geodatabase",
@@ -989,6 +621,9 @@ class BuildMosaic(object):
         parameterType="Required",
         direction="Input")
 
+        # set a default workspace
+        in_workspace.value=arcpy.env.workspace
+
         in_mosaicdataset_name = arcpy.Parameter(
         displayName="Mosaic Dataset Name",
         name="in_mosaicdataset_name",
@@ -996,195 +631,670 @@ class BuildMosaic(object):
         parameterType="Required",
         direction="Input")
 
-        clippingboundary = arcpy.Parameter(
-        displayName="Clipping Boundary",
-        name="clippingboundary",
-        datatype="GPFeatureLayer",
-        parameterType="Optional",
-        direction="Input")
+        arcpy.env.outputCoordinateSystem = arcpy.SpatialReference(3857)
 
-        ## output param is derived
-        ## same as input workspace
-        outGdb=arcpy.Parameter(
-        displayName="Output Workspace",
-        name="outGDB",
-        datatype="DEWorkspace",
+        outMosaic=arcpy.Parameter(
+        displayName="Output Mosaic Dataset",
+        name="outMosaic",
+        datatype="DEMosaicDataset",
         parameterType="Derived",
         direction="Output")
 
-        outGdb.parameterDependencies=[in_workspace.name]
-        outGdb.schema.clone=True
+        params = [in_workspace,in_mosaicdataset_name,outMosaic]
 
-        params = [inMXD,in_workspace,in_mosaicdataset_name,outGdb]
         return params
 
     def isLicensed(self):
         """Set whether tool is licensed to execute."""
+        # should check for advanced as this requires frequency tool
         return True
 
     def updateParameters(self, parameters):
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
-        if (parameters[1].altered == True):
-            gdbValue = parameters[1].valueAsText
-            mdsValue = ''
-            if (parameters[2].altered == True):
-                mdsValue = parameters[2].valueAsText
-
-            mdsDesc = arcpy.Describe(parameters[1].value)
-
-            if hasattr(mdsDesc, "dataType"):
-
-                if (mdsDesc.dataType == 'MosaicDataset'):
-
-                    if (mdsValue != ''):
-                        parameters[1].value = os.path.dirname(gdbValue)
-                        if (parameters[2].valueAsText != os.path.basename(gdbValue)):
-                            parameters[2].value = os.path.basename(gdbValue)
-                    else:
-                        parameters[1].value = os.path.dirname(gdbValue)
-                        parameters[2].value = os.path.basename(gdbValue)
 
         return
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter.  This method is called after internal validation."""
-        arcpy.env.workspace = parameters[1].valueAsText
         try:
-            if (parameters[1].altered == True):
-                desc = arcpy.Describe(parameters[1].valueAsText)
+            if (parameters[0].value):
+                desc = arcpy.Describe(parameters[0].valueAsText)
                 if desc.workspaceType != 'LocalDatabase':
-                    parameters[1].setErrorMessage("Invalid workspace type: "
-                        "Use only file geodatabases for output workspace")
+                    parameters[0].setErrorMessage("Invalid workspace type: Use only file geodatabases for output workspace")
+                    return
 
-        except Exception as e:
-            parameters[1].setErrorMessage(e.message)
-            return
-
-        try:
-            if (parameters[2].altered == True):
-                if (str(parameters[1].value) != None or str(parameters[1]) != "#"):
-                    mdPath = os.path.join(parameters[1].valueAsText,parameters[2].valueAsText)
+            if (parameters[1].value):
+                if (str(parameters[0].value) != None or str(parameters[0]) != "#"):
+                    mdPath = os.path.join(parameters[0].valueAsText,parameters[1].valueAsText)
                     if arcpy.Exists(mdPath):
-                        parameters[1].setWarningMessage(parameters[2].valueAsText + ": Mosaic dataset exists. Data will be added to the mosaic dataset.")
+                        parameters[1].setWarningMessage(parameters[1].valueAsText + ": Existing dataset will be overwritten.")
+
+                # Show error if invalid characters are in mosiac dataset name.
+                chars = set(" ~`!@#$%^&*(){}[]-+=<>,.?|")
+                datasetName = str(parameters[1].value)
+                if any((c in chars) for c in datasetName):
+                    parameters[1].setErrorMessage("Invalid mosaic dataset name.")
+                    return
 
         except Exception as e1:
-            parameters[1].setErrorMessage(e1.message)
+            parameters[0].setErrorMessage(this.GetErrorMessage(e1))
             return
 
         return
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-        inputpath = parameters[0].valueAsText
-        gdbPath = parameters[1].valueAsText
-        mdName = parameters[2].valueAsText
-        mdPath = os.path.join(gdbPath,mdName)
-        descin = arcpy.Describe(inputpath)
-        if descin.datatype.lower() == 'mapdocument':
-            mxdPath = inputpath
-            arcpy.AddMessage("Scanning raster layers from the map Document")
-            mxd = arcpy.mapping.MapDocument(mxdPath)
-            df = arcpy.mapping.ListDataFrames(mxd)[0]
-            gdbworkspace = os.path.dirname(mxdPath)
-            inMDdatalist = ''
-            for lyr in arcpy.mapping.ListLayers(mxd, '', df):
-                try:
-                    if lyr.isRasterLayer:
-                        inMDdata = lyr.dataSource
-                        inMDdatalist = inMDdatalist + inMDdata + ';'
-                except:
-                    arcpy.AddMessage(arcpy.GetMessages())
 
-            # verify that we have some rasters to process in this map doc
-            if len(inMDdatalist) < 1:
-                arcpy.AddError("No rasters in the map document")
+        # validate the layers
+        p=arcpy.mp.ArcGISProject("CURRENT")
+        m=p.listMaps("*")[0]
+        lyrsinit=m.listLayers()
+        #remove mosaic and feature classes from layer list
+        lyrs = []
+        lyrCheck=[]
+        lyrPaths=[]
+        addLayer = True
+        for l in lyrsinit:
+            if ((l.longName.find("\\Boundary") > 0) or (l.longName.find("\\Footprint") > 0) or (l.longName.find("\\Image") > 0)):
+                addLayer = False
+                arcpy.AddMessage("Layer not processed - " + l.longName)
+            else:
+                addLayer = True
+                arcpy.AddMessage("Layer processed - " + l.longName)
+            indx = l.longName.find("\\")
+            print ("layer longname and index")
+            print (l.longName, indx)
+            # describe the layer to see if it's a raster, mosaice, etc
+            d=arcpy.Describe(l)
+            if hasattr(d,'datasetType'):
+                if d.datasetType=="MosaicDataset":
+                    arcpy.AddMessage("Cannot process mosaic dataset {}".format(l.name))
+
+            if l.isRasterLayer:
+                if l.name in lyrsinit:
+                    arcpy.AddMessage("This map contains duplicate raster layer names. Use uniquely named layers.")
+                    #return
+                else:
+                    #exclude feature classes within mosaic dataset. They typically have a naming structure that includes "/"
+                    if addLayer:
+                        lyrs.append(l)
+
+
+
+
+        for l in lyrs:
+
+            # describe the layer to see if it's a raster, mosaice, etc
+            d=arcpy.Describe(l)
+            if hasattr(d,'datasetType'):
+                if d.datasetType=="MosaicDataset":
+                    arcpy.AddMessage("Cannot process mosaic dataset {}".format(l.name))
+
+            if l.isRasterLayer:
+                if l.name in lyrCheck:
+                    arcpy.AddMessage("This map contains duplicate raster layer names. Use uniquely named layers.")
+                else:
+                    lyrCheck.append(l.name)
+                    if l.supports("DATASOURCE"):
+                        lyrPaths.append(l.dataSource)
+
+
+        outMosaic=""
+        workspace=""
+        rasterPaths=[]
+
+        try:
+
+            # if there's no workspace set in param0, set it to the default workspace
+            if (str(parameters[0].value) == None or str(parameters[0]) == "#"):
+                arcpy.AddWarning("Setting workspace to {}".format(arcpy.env.workspace))
+                workspace=arcpy.env.workspace
+            else:
+                workspace=parameters[0].valueAsText
+
+            # make sure the workspace exists
+            if arcpy.Exists(workspace)==False:
+                arcpy.AddError("Workspace {} does not exist".format(workspace))
                 return
 
-            inMDdatalist = inMDdatalist[:-1]
-
-        elif descin.datatype.lower() == 'folder' or descin.datatype.lower() == 'rasterdataset' :
-            inMDdatalist = inputpath
-            arcpy.AddMessage("Scanning raster layers from folder {}".format(inputpath))
-
-            initialEnv=arcpy.env.workspace
-            # verify we have some rasters in an input folder
-            try:
-                if descin.datatype.lower()=='folder':
-                    arcpy.env.workspace=inputpath
-                    rasters=arcpy.ListRasters("*","TIF")
-                    if len(rasters) < 1:
-                        arcpy.AddError("Input folder has no TIFs")
-                        return
-
-            except Exception as e:
-                arcpy.AddError(e.message)
+            # describe the workspace to make sure it's an fGdb
+            desc = arcpy.Describe(workspace)
+            if desc.workspaceType != 'LocalDatabase':
+                arcpy.AddError("Invalid workspace type: {}".format(workspace))
                 return
 
-            finally:
-                arcpy.GetMessages()
-                arcpy.env.workspace=initialEnv
-        else:
-            arcpy.AddError("Unknown input")
+            # if there's no output mosaic name (param1), exit
+            if (str(parameters[1].value) == None or str(parameters[1]) == "#"):
+                arcpy.AddError("Missing output mosaic name")
+                return
+            else:
+                mosaicName=parameters[1].valueAsText
+
+            # Create layer data that contains input ranges, output values, and range labels
+            worked, lyrData = self.AddWeightedOverlayRemapValues(lyrs)
+            if worked == False:
+                return
+
+            # Create a mosaic path from param1 and 2
+            outMosaic = os.path.join(workspace,mosaicName)
+
+            # remove if it exists
+            if arcpy.Exists(outMosaic):
+                arcpy.Delete_management(outMosaic)
+                arcpy.AddMessage(arcpy.GetMessages())
+
+            arcpy.AddMessage("Creating mosaic...")
+
+            # web mercator for all mosaics
+            spatialref=arcpy.SpatialReference(3857)
+
+            # Create the mosaic and get its output (for the output param)
+            arcpy.AddMessage("Creating the mosaic dataset")
+            res = arcpy.CreateMosaicDataset_management(workspace,mosaicName,spatialref,'#', '#', 'NONE', '#')
+
+        except Exception as e2:
+            arcpy.AddError("Error creating the mosaic {}:{} ".format(outMosaic,self.GetErrorMessage(e2)))
             return
 
-        ret_info = suffixExtractNames(inMDdatalist)
-        if (len(ret_info) == 0):
-            # didn't get the list.
-            exit(1)
-
-        configName = 'LSM.xml'
-        config = os.path.join(configBase , configName)
-        #rftpath = parameterPath + 'RasterFunctionTemplates/KeyMetadata.rft.xml'
-        #pyPath = parameterPath + 'RasterFunction/KeyMetadata.py'
-        #updatepyPath(rftpath, pyPath)
-        objTable = AUXTable();
-
-        (fd, filename) = tempfile.mkstemp()
-        unique_table_name = os.path.basename(filename)
-        intablePath = os.path.join(gdbPath, unique_table_name)
-        init = objTable.init(config, intablePath)
-        if (init == False):
-            exit(0)
-
-        print ('Adding records..')
-
-        rec_count = 0
-        for k in ret_info:
-            insert_rec = {'field' : {'info' : {}}}
-            ret_info[k]['Name'] = {'value' : os.path.basename(k)[:-4] }
-            ret_info[k]['Raster'] = {'value' : k }
-            insert_rec['field']['info'] = ret_info[k]
-
-            if (objTable.insertRecord(insert_rec) == True):
-                rec_count += 1
-
-        print ('Total records inserted (%s)' % (rec_count))
-        print ('Done.')
-        objTable.close()    # close will delete the table.
-        args= []
-        args = [pythonPath, os.path.join(solutionLib_path,'MDCS.py'), '#gprun']
-        inconfig = '-i:'+ config
-        args.append(inconfig)
-        data = '-s:'+ str(intablePath)
-
-        md = '-m:' + str(mdPath)
-        args.append(data)
-        args.append(md)
-        p = subprocess.Popen(args, creationflags=subprocess.SW_HIDE, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        message = ''
-        while True:
-            message = p.stdout.readline()
-            if not message:
-                break
-            arcpy.AddMessage(message.rstrip())      #remove newline before adding.
-        print " The process is completed"
-        args = []
         try:
-            arcpy.AddMessage("Deleting temp Table : " + str(intablePath))
-            arcpy.Delete_management(intablePath)
-        except:
-            arcpy.AddMessage("Failed to Remove the table")
+            # create additional fields for the mosaic
+            arcpy.AddMessage("Adding weighted overlay fields to the mosaic dataset...")
+            for fldDef in self.outMoFields:
+                fname=fldDef[0]
+                ftype=fldDef[1]
+                flength=fldDef[2]
+
+                arcpy.AddField_management(outMosaic,fname,ftype,field_length=flength)
+                arcpy.AddMessage(arcpy.GetMessages())
+
+        except Exception as e3:
+            arcpy.AddError("Error adding fields to the mosaic {}: ".format(outMosaic,self.GetErrorMessage(e3)))
+            return
+
+
+        try:
+            #Change the Mosaic resampling type to Nearest Neighbor
+            arcpy.AddMessage("Setting resampling type...")
+            res = arcpy.SetMosaicDatasetProperties_management(res, resampling_type='NEAREST')
+            arcpy.AddMessage(arcpy.GetMessages())
+
+        except Exception as e_resampling:
+            arcpy.AddError("Error setting resampling type {}: ".format(outMosaic,self.GetErrorMessage(e_resampling)))
+            return
+
+
+        try:
+            # add rasters from the map document to the mosaic
+            arcpy.AddMessage("Adding rasters to the mosaic")
+
+            # for each layer in lyrPaths -
+            #  1. verify there's layer data
+            #  2. append the layer and to a list
+            for lyr in lyrPaths:
+                # check for the layer data in list
+                if not any(name[0] == (os.path.splitext(os.path.basename(lyr))[0]) for name in lyrData):
+                    arcpy.AddWarning("{} is missing layer data.".format(lyr))
+                    arcpy.AddWarning("{} will not be inserted into the mosaic".format(lyr))
+                rasterPaths.append(lyr)
+            if len(rasterPaths) > 0:
+                arcpy.AddRastersToMosaicDataset_management(outMosaic,self.rasterType,rasterPaths)
+                arcpy.AddMessage(arcpy.GetMessages())
+            else:
+                arcpy.AddError("No layers in this map document have layer data. Please run tool Add Weighted Overlay Data to create these files.")
+                return
+
+            #Calculate statistics
+            bnd = "outMosaic" + r"\boundary"
+            arcpy.CalculateStatistics_management(outMosaic)
+            arcpy.AddMessage("Calculated statistics on mosaic dataset.")
+
+        except Exception as e7:
+            arcpy.AddError("Error adding rasters to the mosaic {}: ".format(self.GetErrorMessage(e7)))
+            return
+
+        try:
+            # loop through layer data list
+            arcpy.AddMessage("Updating mosaic with data from layer...")
+            for item in lyrData:
+                # Read data from each layer file
+                title=item[0]
+                inputranges=item[1]
+                outputVals=item[2]
+                labels=item[3]
+                rasterFileName=item[4]
+
+                # create a where clause from rasterfilename
+                where="{}='{}'".format(self.updMoFieldsQuery[0],rasterFileName)
+
+                arcpy.AddMessage('Updating {}'.format(title))
+
+                # update the mosaic with data from the lyrData list
+                # self.updMoFields = ["Title","RangeLabels","InputRanges","OutputValues"]
+                with arcpy.da.UpdateCursor(outMosaic,self.updMoFields,where) as cursor:
+                    for row in cursor:
+                        row[0]=title
+                        row[1]=labels
+                        row[2]=inputranges
+                        row[3]=outputVals
+                        cursor.updateRow(row)
+
+
+            arcpy.SetParameter(2,outMosaic)
+
+        except Exception as e4:
+            arcpy.AddError("Error adding data to the mosaic {}: ".format(mosaicFullPath,self.GetErrorMessage(e4)))
+            return
+
         return
+
+    def makeInputRanges(this,sourceRaster):
+        # Creates input ranges from classified colorizers (or no colorizers)
+        res=arcpy.GetRasterProperties_management(sourceRaster,"MINIMUM")
+        minVal=float(str(res.getOutput(0)))
+        res=arcpy.GetRasterProperties_management(sourceRaster,"MAXIMUM")
+        maxVal=float(str(res.getOutput(0)))
+
+        # Create an equal interval array of values
+        sourceValues=np.linspace(minVal,maxVal,6,endpoint=True)
+
+        inputRangesForRemap=""
+
+        # Array must have 6 items
+        if len(sourceValues) != 6:
+            arcpy.AddWarning("Could not compute equal intervals in Raster {}".format(sourceRaster))
+            return False, inputRangesForRemap
+
+        # Check if all items in the array are the same
+        if (sourceValues[0] == sourceValues[1] == sourceValues[2] == sourceValues[3]
+            == sourceValues[4] == sourceValues[5]):
+            ## all items in the array are the same!
+            arcpy.AddWarning("Raster {} has same min and max value".format(sourceRaster))
+
+            # create the max exclusive value
+            maxVal=float(sourceValues[5])
+            maxVal+=1
+
+            # Create a single pair range
+            inputRangesForRemap+="{},{}".format(sourceValues[4],maxVal) #has only 1 pair
+
+            arcpy.AddWarning("Range for raster {} is {}".format(sourceRaster, inputRangesForRemap))
+            arcpy.AddMessage(arcpy.GetMessages())
+
+
+        else:
+            #format into pairs of min-inclusive/max exclusive
+            inputRangesForRemap+="{},{}".format(sourceValues[0],sourceValues[1]) #pair 1
+            inputRangesForRemap+=",{},{}".format(sourceValues[1],sourceValues[2]) #pair 2
+            inputRangesForRemap+=",{},{}".format(sourceValues[2],sourceValues[3]) #pair 3
+            inputRangesForRemap+=",{},{}".format(sourceValues[3],sourceValues[4]) #pair 4
+            maxVal=float(sourceValues[5])
+            maxVal+=1
+            inputRangesForRemap+=",{},{}".format(sourceValues[4],maxVal) #pair 5
+
+        return True, inputRangesForRemap
+
+    # creates input ranges from raster classify colorizer
+    def makeDataFromClassifyColorizer(this,rsDataset,symb):
+        classLabels=""
+        classRngs=""
+        inRngs1=[]
+        inRngs2=[]
+        outVals=""
+
+        try:
+
+            # see if we can read info from the colorizer:
+            # first we need the raster dataset's min value
+            res=arcpy.GetRasterProperties_management(rsDataset,"MINIMUM")
+            minVal=float(str(res.getOutput(0)))
+
+            #add the min value to the inRngs1 list to set the classification's min value
+            inRngs1.append(minVal)
+            inRngs2.append(minVal)
+
+            # loop through the breaks
+            breaks="{}".format(symb.breakCount)
+            for brk in symb.classBreaks:
+                # populate inRngs for input values
+                v1=brk.upperBound
+                inRngs1.append(v1)
+                v2=brk.upperBound
+                inRngs2.append(v2)
+
+                # Set all output values to 5 for now
+                if len(outVals)<1:
+                    outVals='5'
+                else:
+                    outVals+=',5'
+
+            worked, classRngs = this.createInputRangesForRemap(inRngs1,inRngs2)
+
+            #combine the two lists
+            combinedRngs=inRngs1+inRngs2
+
+            # sort, remove the 1st and last 2 items
+            # then increment the last item, and finally convert it to strings
+            # do this to create a list of min-inclusive,max-exlusive values for the raster remap function
+            combinedRngs.sort()
+            for x in [0,-1]: combinedRngs.remove(combinedRngs[x])
+
+            lastValue=combinedRngs[-1]
+            lastValue+=1
+            combinedRngs.remove(combinedRngs[-1])
+            combinedRngs.append(lastValue)
+            thematicRange=','.join(str(x) for x in combinedRngs)
+
+            arcpy.AddMessage("Input Ranges: " + str(thematicRange))
+
+            # populate labels using the thematicRange
+            labelsLst=thematicRange.split(",")
+            labelsLst2=list(zip(labelsLst[0::2],labelsLst[1::2]))
+
+            #format back into a string
+            for l in labelsLst2:
+                if len(classLabels) < 1:
+                    classLabels='{} to {}'.format(l[0],l[1])
+                else:
+                    classLabels+=',{} to {}'.format(l[0],l[1])
+
+            return worked, thematicRange, outVals, classLabels
+
+        except Exception as e:
+            arcpy.AddError("Exception occurred: {}".format(this.GetErrorMessage(e)))
+            return False,"","",""
+
+
+    # creates input ranges from unique value colorizer
+    def makeDataFromUniqueColorizer(this,rsDataset,symb):
+        uvLabels=""
+        uvRngs=""
+        inRngs1=[]
+        inRngs2=[]
+        outVals=""
+
+        try:
+
+            # If the colorizer symbolizes on a field other than Value:
+            # Fetch the Values from the raster's attribute table
+            # and match them to the values and labels in the colorizer
+            if symb.colorizer.field != 'Value':
+                # Create a list of list that contains values and labels
+                vals=[]
+                for grp in symb.colorizer.groups:
+                    for itm in grp.items:
+                        vals.append([itm.values[0],itm.label])
+
+                arcpy.AddMessage("Colorizer values and labels {}".format(vals))
+                arcpy.GetMessages()
+
+                # check for a value field
+                d=arcpy.Describe(rsDataset)
+                foundValue=False
+                for f in d.fields:
+                    if f.name.lower()=="value": foundValue=True
+
+                if foundValue==False:
+                    arcpy.AddWarning("Raster {} has no value field".format(rsDataset))
+                    return False
+
+                # get values and the colorizer field from the raster into a list of lists
+                fields=["Value",symb.colorizer.field]
+                rasterVals=[]
+                with arcpy.da.SearchCursor(rsDataset, fields) as cursor:
+                    for row in cursor:
+                        rasterVals.append([row[0],row[1]])
+
+
+                # these two lists should be the same size
+                if len(rasterVals) != len(vals):
+                    arcpy.AddWarning("Could not determine raster values and raster colorizer values")
+                    arcpy.GetMessages()
+                    return False, "",[], ""
+
+                # iterate through rasterValues and reach into vals to build a list of input ranges, outVals and uvLabels
+                for rasterValue in rasterVals:
+                    # format input ranges
+                    inRngs1.append(float(rasterValue[0]))
+                    inRngs2.append(float(rasterValue[0]))
+
+                    # rasterValue[1] is the row value (the symb.colorizer.field)
+                    for colorizerValue in vals:
+                        if rasterValue[1].lower()==colorizerValue[0].lower():
+                            # use the colorizerValue[1] (the label from the sym.colorizer) as our uvLabel
+                            if len(uvLabels) < 1:
+                                uvLabels='{}'.format(colorizerValue[1])
+                            else:
+                                uvLabels+=',{}'.format(colorizerValue[1])
+
+                    # create a comma-delimited list of output values
+                    # for now, all output values are set to 5
+                    if len(outVals)<1:
+                        outVals='5'
+                    else:
+                        outVals+=',5'
+
+                worked, uvRngs = this.createInputRangesForRemap(inRngs1,inRngs2)
+
+            else:
+                # Colorizer symbolizes on Value field
+                for grp in symb.colorizer.groups:
+                    for itm in grp.items:
+                        try:
+                            v1=""
+                            lbl=""
+
+                            # handle locale setting for seperators (,.) in numbers
+                            if locale.getlocale()==('English_United States', '1252'):
+                                v1=''.join(e for e in itm.values[0] if e.isdigit() or e == '.')
+                                lbl =''.join(e for e in itm.label if e.isdigit() or e == '.')
+                            else:
+                                v1=''.join(e for e in itm.values[0] if e.isdigit() or e == ',')
+                                lbl =''.join(e for e in itm.label if e.isdigit() or e == ',')
+
+                            # build two lists of unique values
+                            inRngs1.append(float(v1))
+                            inRngs2.append(float(v1))
+
+                            # Create a comma-delimited list of labels
+                            if len(uvLabels) < 1:
+                                uvLabels='{}'.format(lbl)
+                            else:
+                                uvLabels+=',{}'.format(lbl)
+
+                            # create a comma-delimited list of output values
+                            # for now, all output values are set to 5
+                            if len(outVals)<1:
+                                outVals='5'
+                            else:
+                                outVals+=',5'
+
+                        except Exception as eInner:
+                            arcpy.AddWarning("Exception occurred: {}".format(this.GetErrorMessage(eInner)))
+
+                # format list unique values into comma delimited string of min-inclusive/max-exclusive values
+                worked, uvRngs = this.createInputRangesForRemap(inRngs1,inRngs2)
+
+            return worked, uvRngs, outVals, uvLabels
+
+        except Exception as e:
+            arcpy.AddError("Exception occurred: {}".format(this.GetErrorMessage(e)))
+            return False,"","",""
+
+
+    ## Returns a comma delimited string that represents min-inclusive, max-exclusive ranges
+    ## for the remap function
+    def createInputRangesForRemap(this,rangeList1,rangeList2):
+        try:
+
+            # combine the two range lists
+            combinedRngs=rangeList1+rangeList2
+
+            # sort, remove the 1st and change the last items, and finally convert it to strings
+            # do this to create a list of min-inclusive,max-exlusive values for the raster remap function
+            combinedRngs.sort()
+            combinedRngs.remove(combinedRngs[0])
+            lastValue=combinedRngs[-1]
+            lastValue+=1
+            combinedRngs.append(lastValue)
+            thematicRange=','.join(str(x) for x in combinedRngs)
+
+            return True, thematicRange
+
+        except Exception as e:
+            arcpy.AddError("Exception occurred: {}".format(this.GetErrorMessage(e)))
+            return False,""
+
+
+    def AddWeightedOverlayRemapValues(this,mLyrs):
+        try:
+            if (mLyrs):
+                rasterLayers=[]
+                lyrCheck=[]
+                lyrData =[]
+
+                # check for raster layers
+                for l in mLyrs:
+                    if (l.isRasterLayer):
+                        if l.name in lyrCheck:
+                            arcpy.AddError("This document contains duplicate raster layer names. Use uniquely named layers.")
+                            return False
+                        else:
+                            lyrCheck.append(l.name)
+                            rasterLayers.append(l)
+
+                    else:
+                        arcpy.AddWarning("Cannot process layer {}. Not a raster layer".format(l.name))
+
+                # exit if there are none
+                if len(rasterLayers)<1:
+                    arcpy.AddError("There are no raster layers to process in this document")
+                    return False
+                else:
+                    arcpy.AddMessage("Processing {} raster layers".format(len(rasterLayers)))
+
+                rastertitle=""
+                rasterpath=""
+                rasterExtension=""
+                outputValues=""
+                labels=""
+                rasterFileName = ""
+                inras=""
+                #inaux=""
+                rasData=[]
+
+                # Process Unique values and stretch/classified colorizers
+                for l in rasterLayers:
+                    try:
+                        arcpy.AddMessage("Processing layer {}...".format(l.name))
+                        rastertitle=l.name
+                        # Create another variable that represents the toc layer name
+                        rasterpath=l.dataSource
+                        #layerDesc=l.description
+                        rasterExtension="" # clear any values set
+
+                        # Define raster file name from folder path
+                        counter = rasterpath.rfind("\\") +1
+                        rasterFileName = rasterpath[counter:len(rasterpath)]
+
+                        # describe the raster to get its no data values & other info
+                        desc=arcpy.Describe(l)
+                        inras=desc.catalogPath
+
+
+                        # check for an extension in the name (like foo.tif)
+                        try:
+                            rasterExtension=desc.extension
+
+                            # remove it from the title
+                            rastertitle=rastertitle.replace(rasterExtension,"")
+                            if rastertitle.endswith("."):
+                                rastertitle=rastertitle.replace(".","")
+                            arcpy.AddWarning("Removed extension {} from layer {}".format(rasterExtension,rastertitle))
+
+                            # remove it from file name
+                            rasterFileName = rasterFileName.replace(rasterExtension, "")
+                            if rasterFileName.endswith("."):
+                                rasterFileName=rasterFileName.replace(".","")
+
+
+                        except Exception as eExt:
+                            arcpy.AddError("Extension error {}".format(this.GetErrorMessage(eExt)))
+                            pass
+
+
+                        # Process unique values differently than stretch/classified
+                        sym=l.symbology
+
+                        # string that represents min inclusive/max exclusive values
+                        inputRanges=""
+
+                        # http://pro.arcgis.com/en/pro-app/tool-reference/data-management/get-raster-properties.htm
+                        # Process GENERIC, ELEVATION, PROCESSED AND SCIENTIFIC rasters by computing an equal interval classification
+                        # Process THEMATIC rasters as unique values/categorical
+                        rasterSourcetypeResult = arcpy.GetRasterProperties_management(inras, "SOURCETYPE")
+                        rasterSourcetype = rasterSourcetypeResult.getOutput(0)
+                        arcpy.AddMessage("{} is {}".format(inras, rasterSourcetype))
+
+                        if rasterSourcetype.upper() == "THEMATIC" or (hasattr(sym,'colorizer') and sym.colorizer.type=='RasterUniqueValueColorizer'):
+                            worked, inputRanges, outputValues, labels = this.makeDataFromUniqueColorizer(inras,sym)
+                            if worked==False:
+                                arcpy.AddWarning("Could not create ranges for unique colorizer in {}".format(inras))
+                                arcpy.AddMessage(arcpy.GetMessages())
+                                continue
+
+                        elif rasterSourcetype.upper() == "VECTOR_UV" or rasterSourcetype.upper() == "VECTOR_MAGDIR":
+                            arcpy.AddWarning("Skipping data type of VECTOR_UV or VECTOR_MAGDIR {}".format(inras))
+                            arcpy.AddMessage(arcpy.GetMessages())
+                            continue
+
+                        elif (hasattr(sym,'colorizer') and sym.colorizer.type=='RasterClassifyColorizer'):
+                            worked, inputRanges, outputValues, labels = this.makeDataFromClassifyColorizer(inras,sym.colorizer)
+                            if worked==False:
+                                arcpy.AddWarning("Could not create ranges for classified colorizer in {}".format(inras))
+                                arcpy.AddMessage(arcpy.GetMessages())
+                                continue
+
+                        else:
+                            # no colorizer, try to the min-max values anyways
+                            # check min and max values in the dataset
+                            try:
+                                worked, inputRanges = this.makeInputRanges(inras)
+                            except Exception as e_inputRanges:
+                                arcpy.AddWarning("Error creating input ranges for layer {}: {}".format(rastertitle, this.GetErrorMessage(e_inputRanges)))
+                                continue
+
+                            if worked==False:
+                                arcpy.AddWarning("Could not create ranges for {}".format(inras))
+                                arcpy.AddMessage(arcpy.GetMessages())
+                                continue
+
+                            else:
+                                # set outputValues and Range Labels
+                                outputValues="1,3,5,7,9"
+                                labels="Very Low, Low, Medium, High, Very High"
+
+                        rasData=(rastertitle,inputRanges,outputValues,labels,rasterFileName)
+                        lyrData.append(rasData)
+
+                    except Exception as e1:
+                        arcpy.AddError("Exception occurred: {}".format(this.GetErrorMessage(e1)))
+                        return False, []
+            else:
+                arcpy.AddError("Invalid ArcGIS Project: {}".format(aMapdoc))
+                return False, []
+
+            return True, lyrData
+
+        except Exception as e:
+            arcpy.AddError("Exception occurred: {}".format(this.GetErrorMessage(e)))
+            return False, []
+
+    # Get exception message if available, otherwise use exception.
+    def GetErrorMessage(this, e):
+        if hasattr(e, 'message'):
+            return e.message
+        else:
+            return e
