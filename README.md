@@ -7,6 +7,7 @@ This python toolbox helps you create and configure a mosaic dataset for use in a
 Note: This is an update to a previous toolbox. This update contains tools that are easier to use and work with ArcGIS Pro. To access the previous toolbox, please clone the branch wro2017.
 
 [GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/)
+
 [Web AppBuilder for ArcGIS](http://doc.arcgis.com/en/web-appbuilder/)
 
 ![App](https://github.com/Esri/weighted-raster-overlay-service-toolbox/blob/master/Suitability%20Modeler%20in%20Web%20AppBuilder.png)
