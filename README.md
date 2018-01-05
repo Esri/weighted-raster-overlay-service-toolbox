@@ -22,7 +22,7 @@ Note: This is an update to a previous toolbox. This update contains tools that a
 
 1. Fork and then clone the repo. 
 2. Open ArcGIS Pro and browse to the python toolbox.
-3. [Review this doc to setup your weighted overlay service] (http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
+3. [Review this doc to setup your weighted overlay service](http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
 
 ## Requirements
 
