@@ -2,13 +2,9 @@
 
 Tools to create and configure raster data for web-based weighted overlay to support suitability modeling. 
 
-This python toolbox helps you create and configure a mosaic dataset for use in a web-based weighted overlay analysis service. You can use these services from web-based clients like GeoPlanner for ArcGIS and Web AppBuilder to help find the best place or identify risks in an area. 
+This python toolbox helps you create and configure a mosaic dataset for use in a web-based weighted overlay analysis service. You can use these services from web-based clients like [GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/) and [Web AppBuilder for ArcGIS](http://doc.arcgis.com/en/web-appbuilder/) to help find the best place or identify risks in an area. 
 
 Note: This is an update to a previous toolbox. This update contains tools that are easier to use and work with ArcGIS Pro. To access the previous toolbox, please clone the branch wro2017.
-
-[GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/)
-
-[Web AppBuilder for ArcGIS](http://doc.arcgis.com/en/web-appbuilder/)
 
 ![App](https://github.com/Esri/weighted-raster-overlay-service-toolbox/blob/master/Suitability%20Modeler%20in%20Web%20AppBuilder.png)
 
