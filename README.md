@@ -1,38 +1,45 @@
 # weighted-raster-overlay-service-toolbox
 
-Tools to create and configure data for web-based weighted overlay to support suitability modeling. 
+Tools to create and configure raster data for web-based weighted overlay to support suitability modeling. 
 
-This python toolbox helps you create and configure a mosaic dataset for use in a web-based weighted overlay analysis service. You can use these services from web-based clients like GeoPlanner for ArcGIS to help find the best place or identify risks in an area. 
+This python toolbox helps you create and configure a mosaic dataset for use in a web-based weighted overlay analysis service. You can use these services from web-based clients like [GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/) and [Web AppBuilder for ArcGIS](http://doc.arcgis.com/en/web-appbuilder/) to help find the best place or identify risks in an area. 
 
-[GeoPlanner for ArcGIS](http://doc.arcgis.com/en/geoplanner/)
+Note: This is an update to a previous toolbox. This update contains tools that are easier to use and work with ArcGIS Pro. To access the previous toolbox, please clone the branch wro2017.
 
-![App](https://github.com/ArcGIS/weighted-raster-overlay-service-toolbox/blob/master/weighted-raster-overlay-service-toolbox.png)
+![App](https://github.com/Esri/weighted-raster-overlay-service-toolbox/blob/master/Suitability%20Modeler%20in%20Web%20AppBuilder.png)
 
 ## Features
-* Feature To Raster - Rasterize vector data using distance, density, presence/absence, or attribute processes
-* Configure Raster Fields - Creates range data and labels for the suitability scale used in the weighted overlay service
-* Build Mosaic Dataset - Generates a mosaic dataset from your rasters and populates range and label fields using data from Configure Raster Fields 
+* Create Weighted Overlay Mosaic - Creates a new mosaic dataset for weighted overlay analysis. The tool writes all .tif raster layers in an ArcGIS Pro Contents Pane to the mosaic. Symbology information is read from each layer and written to fields within the mosaic. 
+
+* Update WRO Layer Classification - Updates the title and classification ranges of a layer in a weighted overlay mosaic. This tool allows you to refine the classifications created by the Create Weighted Overlay Mosaic tool. 
+
+* Update WRO Layer Info - Updates layer information in a weighted overlay mosaic. This tool allows you to change a layer's title and description, add a preview or informational URL and define a dataset value range as NoData. 
+
 
 ## Instructions
 
 1. Fork and then clone the repo. 
-2. Open ArcGIS Desktop and browse to the python toolbox.
-3. [Review this doc to setup your weighted overlay service] (http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
+2. Open ArcGIS Pro and browse to the python toolbox.
+3. [Review this doc to setup your weighted overlay service](http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
 
 ## Requirements
 
-* ArcGIS 10.3 for Desktop or newer 
-* ArcGIS Spatial Analyst Extension for Desktop
-* ArcGIS 10.3 for Server or newer (for hosting the weighted overlay service)
-* ArcGIS Image Extension for Server
+* ArcGIS Pro 2.01 or newer 
+* ArcGIS Enterprise 10.5 or newer
+* ArcGIS Image Server
+* GeoPlanner for ArcGIS or Web AppBuilder
 
 ## Resources
 
-* [GeoPlanner documentation](http://doc.arcgis.com/en/geoplanner/guide/what-is-a-geodesign-project.htm)
+* [GeoPlanner documentation](http://doc.arcgis.com/en/geoplanner)
 * [Understanding weighted overlay in GeoPlanner](http://doc.arcgis.com/en/geoplanner/documentation/find-the-best-place-using-weighted-overlay.htm)
 * [Build your own weighted raster overlay service](http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
-* [ArcGIS Blog](http://blogs.esri.com/esri/arcgis/)
-* [twitter@esri](http://twitter.com/esri)
+* [Web AppBuilder Suitability Modeler Widget](http://doc.arcgis.com/en/web-appbuilder/create-apps/widget-suitability-modeler.htm)
+* [GeoPlanner on GeoNet](https://community.esri.com/community/gis/applications/geoplanner-for-arcgis)
+* [Web AppBuilder on GeoNet](https://community.esri.com/community/gis/web-gis/web-appbuilder)
+* [GeoPlanner blog](https://www.esri.com/search?filter=Blogs&q=geoplanner&search=Search)
+* [Web AppBuilder blog](https://www.esri.com/search?filter=Blogs&q=Web%20AppBuilder&search=Search)
+* [@ArcGISApps](https://twitter.com/ArcGISApps)
 
 ## Issues
 
