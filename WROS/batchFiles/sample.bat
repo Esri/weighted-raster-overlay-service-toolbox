@@ -1,1 +1,0 @@
-c:\Python27\ArcGIS10.3\python.exe f:\model\v3\scripts\MDCS.py -i:f:\model\v3\Parameter\Config\LSM.xml -m:F:\model\v3\MD\suitability.gdb\service -s:F:\model\v3\data\land_raster_presence_absence.tif
