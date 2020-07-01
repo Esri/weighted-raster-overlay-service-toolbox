@@ -21,6 +21,9 @@ import string, random, os, locale
 
 import numpy as np
 
+# Set the resampling method environment to Nearest
+arcpy.env.resamplingMethod = "NEAREST"
+
 class Toolbox(object):
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
@@ -116,6 +119,11 @@ class UpdateWROClassification(object):
                 parameters[3].value = None
                 parameters[4].value = None
                 #parameters[5].value = None
+
+                # Clear values
+                label_list = []
+                range_list = []
+                suitability_list = []
 
                 # Check for required mosaic dataset fields
                 missing_flds = []
@@ -230,12 +238,12 @@ class UpdateWROClassification(object):
         ##field=["Title", "RangeLabels", "InputRanges", "OutputValues","OID@"]
         with arcpy.da.SearchCursor(mosaic_dataset, fields, where) as cur:
             row = cur.next()
-            if title != row[0]:
+            if str(title) != str(row[0]):
                 changes = True
                 arcpy.AddMessage("Title:")
-                arcpy.AddMessage("\tOriginal: " + row[0])
+                arcpy.AddMessage("\tOriginal: " + str(row[0]))
                 arcpy.AddMessage("\tNew: " + title)
-            if range_labels != row[1].replace(", ", ","):
+            if str(range_labels).replace(", ", ",") != str(row[1]).replace(", ", ","):
                 changes = True
                 arcpy.AddMessage("Range Labels:")
                 self.showMessages(row[1],range_labels)
