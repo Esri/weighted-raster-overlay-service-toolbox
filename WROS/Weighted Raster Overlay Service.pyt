@@ -21,6 +21,9 @@ import string, random, os, locale
 
 import numpy as np
 
+# Set the resampling method environment to Nearest
+arcpy.env.resamplingMethod = "NEAREST"
+
 class Toolbox(object):
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
