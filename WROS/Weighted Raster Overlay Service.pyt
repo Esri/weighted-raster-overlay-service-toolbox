@@ -120,6 +120,11 @@ class UpdateWROClassification(object):
                 parameters[4].value = None
                 #parameters[5].value = None
 
+                # Clear values
+                label_list = []
+                range_list = []
+                suitability_list = []
+
                 # Check for required mosaic dataset fields
                 missing_flds = []
                 fld_list = [fld.name for fld in arcpy.ListFields(parameters[0].value)]
@@ -233,12 +238,12 @@ class UpdateWROClassification(object):
         ##field=["Title", "RangeLabels", "InputRanges", "OutputValues","OID@"]
         with arcpy.da.SearchCursor(mosaic_dataset, fields, where) as cur:
             row = cur.next()
-            if title != row[0]:
+            if str(title) != str(row[0]):
                 changes = True
                 arcpy.AddMessage("Title:")
-                arcpy.AddMessage("\tOriginal: " + row[0])
+                arcpy.AddMessage("\tOriginal: " + str(row[0]))
                 arcpy.AddMessage("\tNew: " + title)
-            if range_labels != row[1].replace(", ", ","):
+            if str(range_labels).replace(", ", ",") != str(row[1]).replace(", ", ","):
                 changes = True
                 arcpy.AddMessage("Range Labels:")
                 self.showMessages(row[1],range_labels)
