@@ -835,10 +835,13 @@ class CreateWeightedOverlayMosaic(object):
             # add rasters from the map document to the mosaic
             arcpy.AddMessage("Adding rasters to the mosaic")
 
+            calcStats = True
             rasters = []
             for item in lyrData:
                 l = item[5]
                 rasters.append(l.dataSource)
+                if l.isWebLayer:
+                    calcStats = False
             if len(rasters) > 0:
                 arcpy.AddRastersToMosaicDataset_management(outMosaic,"Raster Dataset",rasters)
                 arcpy.AddMessage(arcpy.GetMessages())
@@ -846,9 +849,11 @@ class CreateWeightedOverlayMosaic(object):
                 arcpy.AddError("No layers in this map document have layer data. Please run tool Add Weighted Overlay Data to create these files.")
                 return
 
+            #bnd = "outMosaic" + r"\boundary"
+
+            arcpy.AddMessage("zzz calcStats "+str(calcStats))
+
             #Calculate statistics
-            bnd = "outMosaic" + r"\boundary"
-            calcStats = False
             if calcStats:
                 arcpy.AddMessage("Claculating statistics...")
                 arcpy.CalculateStatistics_management(outMosaic)
@@ -857,10 +862,6 @@ class CreateWeightedOverlayMosaic(object):
         except Exception as e7:
             arcpy.AddError("Error adding rasters to the mosaic {}: ".format(self.GetErrorMessage(e7)))
             return
-
-        # if (True):
-        #     arcpy.AddError("Short-circuit...")
-        #     return 
 
         try:
             # loop through layer data list
