@@ -306,7 +306,7 @@ class UpdateWROClassification(object):
                         row = (title, range_labels, ranges, output_values)
                         cur.updateRow(row)
                     except Exception as eIns:
-                        arcpy.AddWarning("An error occurred while updating the mosaic: " + this.GetErrorMessage(eIns))
+                        arcpy.AddWarning("An error occurred while updating the mosaic: " + self.GetErrorMessage(eIns))
 
 
         else:
@@ -650,7 +650,14 @@ class CreateWeightedOverlayMosaic(object):
         parameterType="Derived",
         direction="Output")
 
-        params = [in_workspace,in_mosaicdataset_name,outMosaic]
+        in_visible_only = arcpy.Parameter(
+        displayName="Visible Layers Only",
+        name="in_visible_only",
+        datatype="GPBoolean",
+        parameterType="Optional",
+        direction="Input")
+
+        params = [in_workspace,in_mosaicdataset_name,outMosaic,in_visible_only]
 
         return params
 
@@ -690,7 +697,7 @@ class CreateWeightedOverlayMosaic(object):
                     return
 
         except Exception as e1:
-            parameters[0].setErrorMessage(this.GetErrorMessage(e1))
+            parameters[0].setErrorMessage(self.GetErrorMessage(e1))
             return
 
         return
@@ -708,6 +715,7 @@ class CreateWeightedOverlayMosaic(object):
             arcpy.AddError("There is no map to process")
             return
 
+        visibleOnly = parameters[3].value
         lyrsinit=m.listLayers()
         lyrs = []
         lyrCheck=[]
@@ -719,12 +727,20 @@ class CreateWeightedOverlayMosaic(object):
             if l.isRasterLayer:
 
                 d=arcpy.Describe(l)
-                arcpy.AddMessage(l.longName+ " "+d.datasetType+" - "+l.dataSource)
-                # arcpy.AddMessage(l.longName+ " isWebLayer "+str(l.isWebLayer))
+                #arcpy.AddMessage(l.longName+ " "+d.datasetType+" - "+l.dataSource)
+                #arcpy.AddMessage(l.name+ ", isWebLayer: "+str(l.isWebLayer)+", visible: "+str(l.visible))
+
+                if addLayer and visibleOnly and (not l.visible):
+                    addLayer = False
+
                 if addLayer and hasattr(d,'datasetType'):
                     if d.datasetType=="MosaicDataset":
                         addLayer = False
                         arcpy.AddMessage("Cannot process mosaic dataset {}".format(l.name))
+
+                if addLayer and l.isWebLayer:              
+                    addLayer = False
+                    arcpy.AddMessage("Cannot process web layer {}".format(l.name))
 
                 if addLayer and (not l.supports("DATASOURCE")):              
                     addLayer = False
@@ -736,10 +752,7 @@ class CreateWeightedOverlayMosaic(object):
 
                 if addLayer and (l.name in lyrCheck):
                     addLayer = False
-                    arcpy.AddMessage("This map contains duplicate raster layer names. Use uniquely named layers.")
-
-                # if addLayer and l.name == "USA NLCD Land Cover":
-                #     addLayer = False
+                    arcpy.AddMessage("This map contains duplicate raster layer names. Use uniquely named layers {}".format(l.name))
 
                 if addLayer:
                     arcpy.AddMessage("Layer - " + l.longName)
@@ -748,6 +761,10 @@ class CreateWeightedOverlayMosaic(object):
 
         try:
 
+            if (True):
+                arcpy.AddError("zzz short-circuit")
+                return
+        
             if (not lyrs):
                 arcpy.AddError("There are no raster layers to process in this map")
                 return
@@ -780,7 +797,10 @@ class CreateWeightedOverlayMosaic(object):
             # Create layer data that contains input ranges, output values, and range labels
             worked, lyrData = self.AddWeightedOverlayRemapValues(lyrs)
             if worked == False:
-                return 
+                return
+            if (not lyrData):
+                arcpy.AddError("No layers in this map document have layer data.")
+                return
 
             # Create a mosaic path from param1 and 2
             outMosaic = os.path.join(workspace,mosaicName)
@@ -844,14 +864,15 @@ class CreateWeightedOverlayMosaic(object):
                 arcpy.AddRastersToMosaicDataset_management(outMosaic,"Raster Dataset",rasters)
                 arcpy.AddMessage(arcpy.GetMessages())
             else:
-                arcpy.AddError("No layers in this map document have layer data. Please run tool Add Weighted Overlay Data to create these files.")
+                arcpy.AddError("No layers in this map document have layer data.")
+                #arcpy.AddError("No layers in this map document have layer data. Please run tool Add Weighted Overlay Data to create these files.")
                 return
 
             #bnd = "outMosaic" + r"\boundary"
 
             #Calculate statistics
             if calcStats:
-                arcpy.AddMessage("Claculating statistics...")
+                arcpy.AddMessage("Calculating statistics...")
                 arcpy.CalculateStatistics_management(outMosaic)
                 arcpy.AddMessage("Calculated statistics on mosaic dataset.")
 
@@ -1220,7 +1241,7 @@ class CreateWeightedOverlayMosaic(object):
                                 ext = "." + rasterExtension
                                 if rastertitle.endswith(ext):
                                     rastertitle = rastertitle[0:len(rastertitle) - len(ext)]
-                                    arcpy.AddWarning("Removed extension {} from layer {}".format(ext,rastertitle))
+                                    arcpy.AddMessage("Removed extension {} from layer {}".format(ext,rastertitle))
 
                             # remove it from file name
                             if (type(rasterFileName) == str) and (type(rasterExtension) == str) and (len(rasterExtension) > 0):
@@ -1245,7 +1266,9 @@ class CreateWeightedOverlayMosaic(object):
                         rasterSourcetype = rasterSourcetypeResult.getOutput(0)
                         arcpy.AddMessage("{} is {}".format(rastertitle, rasterSourcetype))
 
-                        if rasterSourcetype.upper() == "THEMATIC" or (hasattr(sym,'colorizer') and sym.colorizer.type=='RasterUniqueValueColorizer'):
+                        # @todo do we need the THEMATIC check
+                        #if rasterSourcetype.upper() == "THEMATIC" or (hasattr(sym,'colorizer') and sym.colorizer.type=='RasterUniqueValueColorizer'):
+                        if (hasattr(sym,'colorizer') and sym.colorizer.type=='RasterUniqueValueColorizer'):
                             worked, inputRanges, outputValues, labels = this.makeDataFromUniqueColorizer(l,inras,sym)
                             if worked==False:
                                 arcpy.AddWarning("Could not create ranges for unique colorizer in {}".format(rastertitle))
@@ -1271,7 +1294,12 @@ class CreateWeightedOverlayMosaic(object):
                                 worked, inputRanges = this.makeInputRanges(l,inras)
                             except Exception as e_inputRanges:
                                 arcpy.AddWarning("Error creating input ranges for layer {}: {}".format(rastertitle, this.GetErrorMessage(e_inputRanges)))
-                                continue
+                                # @todo - continue with a default set of ranges?
+                                # continue
+                                worked = True
+                                inputRanges = "1.0,50.0,50.0,100.0,100.0,150.0,150.0,200.0,200.0,256.0"
+                                arcpy.AddWarning("Using default set of input ranges for layer {}".format(rastertitle))
+                                
 
                             if worked==False:
                                 arcpy.AddWarning("Could not create ranges for {}".format(rastertitle))
