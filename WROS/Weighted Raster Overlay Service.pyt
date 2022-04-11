@@ -761,9 +761,9 @@ class CreateWeightedOverlayMosaic(object):
 
         try:
 
-            if (True):
-                arcpy.AddError("zzz short-circuit")
-                return
+            # if (True):
+            #     arcpy.AddError("zzz short-circuit")
+            #     return
         
             if (not lyrs):
                 arcpy.AddError("There are no raster layers to process in this map")
