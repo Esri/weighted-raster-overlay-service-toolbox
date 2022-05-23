@@ -613,12 +613,12 @@ class CreateWeightedOverlayMosaic(object):
         self.description += "The output mosaic dataset contains the raster layers in the input map document."
         self.canRunInBackground = False
         self.inTableSchema=["title","rasterPath","Label","minRangeValue","maxRangeValue","SuitabilityVal","Description","NoDataVal","NoDataLabel","URL"]
-        self.outMoFields=[('Title','String',50),('Description','String',1024),('Url','String',1024),('InputRanges','String',2048),('NoDataRanges','String',256),('RangeLabels','String',1024),('NoDataRangeLabels','String',1024),('OutputValues','String',256),('Metadata','String',1024),('dataset_id','String',50)]
+        self.outMoFields=[('Title','String',1024),('Description','String',1024),('Url','String',1024),('InputRanges','String',2048),('NoDataRanges','String',256),('RangeLabels','String',1024),('NoDataRangeLabels','String',1024),('OutputValues','String',256),('Metadata','String',1024),('dataset_id','String',1024)]
         self.updMoFields=["Title","RangeLabels","InputRanges","OutputValues"]
         self.updMoFieldsQuery=["Name"]
         self.resampling='NEAREST'
 
-        self.outMoFields2=[['Title','TEXT','Title',50],['Description','TEXT','Description',1024],['Url','TEXT','Url',1024],['InputRanges','TEXT','InputRanges',2048],['NoDataRanges','TEXT','NoDataRanges',256],['RangeLabels','TEXT','RangeLabels',1024],['NoDataRangeLabels','TEXT','NoDataRangeLabels',1024],['OutputValues','TEXT','OutputValues',256],['Metadata','TEXT','Metadata',1024],['dataset_id','TEXT','dataset_id',50]]
+        self.outMoFields2=[['Title','TEXT','Title',1024],['Description','TEXT','Description',1024],['Url','TEXT','Url',1024],['InputRanges','TEXT','InputRanges',2048],['NoDataRanges','TEXT','NoDataRanges',256],['RangeLabels','TEXT','RangeLabels',1024],['NoDataRangeLabels','TEXT','NoDataRangeLabels',1024],['OutputValues','TEXT','OutputValues',256],['Metadata','TEXT','Metadata',1024],['dataset_id','TEXT','dataset_id',1024]]
 
 
     def getParameterInfo(self):
