@@ -1,14 +1,31 @@
+# Weighted-raster-overlay-service toolbox
+This python toolbox contains analysis tools that help prepare and configure data for a weighted overlay service. The tools apply the proper fields, properties, and metadata to your raster layers and mosaic dataset. The service can be used in web-based apps such as ArcGIS GeoPlanner, ArcGIS Web AppBuilder, and ArcGIS Experience Builder.
+
+## Tools
+|Toolname                      |Description   |
+|------------------------------|--------------|
+|Create Weighted Overlay Mosaic|Creates a new mosaic dataset for weighted overlay analysis. The tool writes .tiff raster layers in the ArcGIS Pro **Contents** pane to the mosaic. Symbology information is read from each layer and written to the fields within the mosaic.|
+|Update WRO Layer Classification|Update WRO Layer Classification - Updates the title and classification ranges of a layer in a weighted overlay mosaic. This tool allows you to refine the classifications created by the Create Weighted Overlay Mosaic tool.|
+|Update WRO Layer Info|Updates layer information in a weighted overlay mosaic. This tool allows you to change a layer's title and description.|
+
+## Instructions
+1. Download the toolbox by clicking on the **Code** drop-down arrow and choosing the **Download ZIP** option.
+   ![image](https://user-images.githubusercontent.com/59451655/175216467-deea02ae-22d5-4f0f-b644-a87cf3d7f079.png)
+2. Unzip the contents to a location you can access.
+3. In ArcGIS Pro, right-click **Toolboxes** and select **Add New Toolbox**.
+4. Browse to the WRO toolbox and add it.
+
+The toolbox contains the three aforementioned script tools.
+
+[Learn more about building a weighted overlay service with these scripts](https://doc.arcgis.com/en/geoplanner/latest/documentation/create-a-mosaic-dataset.htm)
+
 ## Resources
 
-* [GeoPlanner documentation](http://doc.arcgis.com/en/geoplanner)
-* [Understanding weighted overlay in GeoPlanner](http://doc.arcgis.com/en/geoplanner/documentation/find-the-best-place-using-weighted-overlay.htm)
-* [Build your own weighted raster overlay service](http://doc.arcgis.com/en/geoplanner/documentation/use-your-data-in-weighted-overlay.htm)
-* [Web AppBuilder Suitability Modeler Widget](http://doc.arcgis.com/en/web-appbuilder/create-apps/widget-suitability-modeler.htm)
-* [GeoPlanner on GeoNet](https://community.esri.com/community/gis/applications/geoplanner-for-arcgis)
-* [Web AppBuilder on GeoNet](https://community.esri.com/community/gis/web-gis/web-appbuilder)
-* [GeoPlanner blog](https://www.esri.com/search?filter=Blogs&q=geoplanner&search=Search)
-* [Web AppBuilder blog](https://www.esri.com/search?filter=Blogs&q=Web%20AppBuilder&search=Search)
-* [@ArcGISApps](https://twitter.com/ArcGISApps)
+* [GeoPlanner documentation](https://doc.arcgis.com/en/geoplanner/latest/documentation/)
+* [Understanding weighted overlay in GeoPlanner](https://doc.arcgis.com/en/geoplanner/latest/documentation/find-the-best-place-using-weighted-overlay.htm)
+* [Build your own weighted raster overlay service](https://doc.arcgis.com/en/geoplanner/latest/documentation/use-your-data-in-weighted-overlay-portal-.htm)
+* [ArcGIS Web AppBuilder Suitability Modeler Widget](https://doc.arcgis.com/en/web-appbuilder/create-apps/widget-suitability-modeler.htm)
+* [ArcGIS Experience Builder Suitability Modeler Widget](https://doc.arcgis.com/en/experience-builder/configure-widgets/suitability-modeler-widget.htm)
 
 ## Issues
 
@@ -19,7 +36,7 @@ Find a bug or want to request a new feature?  Please let us know by submitting a
 Esri welcomes contributions from anyone and everyone. Please see our [guidelines for contributing](https://github.com/esri/contributing).
 
 ## Licensing
-Copyright 2015 Esri
+Copyright 2022 Esri
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
