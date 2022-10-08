@@ -9,7 +9,7 @@ This python toolbox contains analysis tools that help prepare and configure data
 |------------------------------|--------------|
 |Create Weighted Overlay Mosaic|Creates a new mosaic dataset for weighted overlay analysis. The tool writes supported imagery types in the ArcGIS Pro **Contents** pane to the mosaic. Symbology information is read from each layer and written to the fields within the mosaic.|
 |Update WRO Layer Classification|Update WRO Layer Classification - Updates the title and classification ranges of a layer in a weighted overlay mosaic. This tool allows you to refine the classifications created by the Create Weighted Overlay Mosaic tool.|
-|Update WRO Layer Info|Updates layer information in a weighted overlay mosaic. This tool allows you to change a layer's title and description. It can also add a preview or an informational URL, and it can define a dataset value as [NoData](https://doc.arcgis.com/en/geoplanner/latest/documentation/prepare-your-data.htm#ESRI_SECTION1_ADC47FF2A21F40B8B697B0B4C5D18DC7).|
+|Update WRO Layer Info|Updates layer information in a weighted overlay mosaic. This tool allows you to change a layer's title and description. It can also add a preview or an informational URL.|
 
 ## Instructions
 1. Download the toolbox by clicking on the **Code** drop-down arrow and choosing the **Download ZIP** option.
