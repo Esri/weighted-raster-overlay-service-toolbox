@@ -333,7 +333,7 @@ class UpdateWROLayerInfo(object):
         self.label = "Update WRO Layer Info"
         self.description = "Lets you add descriptive information to a layer in your WRO Mosaic."
         self.canRunInBackground = False
-        self.mo_flds = ["Title", "Description", "Url", "Metadata", "NoDataRanges", "NoDataRangeLabels"]
+        self.mo_flds = ["Title", "Description", "Url", "Metadata"]
 
 
     def getParameterInfo(self):
@@ -382,21 +382,6 @@ class UpdateWROLayerInfo(object):
         parameterType="Optional",
         direction="Input")
 
-        wro_lyr_no_data_ranges=arcpy.Parameter(
-        displayName="WRO Layer NoData Value",
-        name="wroLayerNoDataRanges",
-        datatype="GPDouble",
-        parameterType="Optional",
-        direction="Input")
-
-        # Cam: change to NoData Label instead of No Data Labels?
-        wro_lyr_no_data_range_labels=arcpy.Parameter(
-        displayName="WRO Layer NoData Label",
-        name="wroLayerNoDataRangeLabels",
-        datatype="GPString",
-        parameterType="Optional",
-        direction="Input")
-
         out_mosaic=arcpy.Parameter(
         displayName="Output Mosaic Dataset",
         name="outMosaic",
@@ -408,7 +393,7 @@ class UpdateWROLayerInfo(object):
         out_mosaic.schema.clone=True
 
         params = [in_mosaic ,wro_lyr, wro_title, wro_lyr_desc, wro_lyr_preview_url,
-                  wro_lyr_info_url, wro_lyr_no_data_ranges, wro_lyr_no_data_range_labels, out_mosaic]
+            wro_lyr_info_url, out_mosaic]
 
         return params
 
@@ -428,8 +413,6 @@ class UpdateWROLayerInfo(object):
                 parameters[3].value = None
                 parameters[4].value = None
                 parameters[5].value = None
-                parameters[6].value = None
-                parameters[7].value = None
 
             # Get list of layer names and populate WRO Mosaic Layer param
             names = []
@@ -455,22 +438,18 @@ class UpdateWROLayerInfo(object):
                 parameters[3].value = None
                 parameters[4].value = None
                 parameters[5].value = None
-                parameters[6].value = None
-                parameters[7].value = None
 
 
                 # Get Layer Title and Mosaic Layer Data values for user-selected Mosaic Layer (param 1)
                 if parameters[1].value:
                     where = "Name = '" + parameters[1].valueAsText + "'"
-                    ##["Title", "Description", "Url", "Metadata", "NoDataRanges", "NoDataRangeLabels"]
+                    ##["Title", "Description", "Url", "Metadata"]
                     with arcpy.da.SearchCursor(parameters[0].value, self.mo_flds, where) as cur:
                         row = cur.next()
 ##                        self._title = row[0]
 ##                        self._description = row[1]
 ##                        self._url = row[2]
 ##                        self._metadata = row[3]
-##                        self._no_data_ranges = row[4]
-##                        self._no_data_range_labels = row[5]
 
                         if row[0]:
                             parameters[2].value = row[0]
@@ -480,13 +459,6 @@ class UpdateWROLayerInfo(object):
                             parameters[4].value = row[2]
                         if row[3]:
                             parameters[5].value = row[3]
-                        if row[4]:
-                            try:
-                                   parameters[6].value = row[4].split(",")[0]
-                            except:
-                                   parameters[6].value = None
-                        if row[5]:
-                            parameters[7].value = row[5]
 
         return
 
@@ -503,9 +475,6 @@ class UpdateWROLayerInfo(object):
             if not parameters[5].valueAsText.lower().startswith("http://") and not parameters[5].valueAsText.lower().startswith("https://"):
                 parameters[5].setErrorMessage("Url must begin with http:// or https://")
 
-        if parameters[6].value and (not isinstance(parameters[6].value, float)):
-            parameters[6].setErrorMessage("NoData Value must be a number.")
-
         return
 
 
@@ -518,12 +487,6 @@ class UpdateWROLayerInfo(object):
         description = parameters[3].valueAsText
         url = parameters[4].valueAsText
         metadata = parameters[5].valueAsText
-        #no_data_ranges = parameters[6].valueAsText
-        if parameters[6].value:
-             no_data_ranges = str(parameters[6].valueAsText) + "," + str(parameters[6].valueAsText)
-        else:
-             no_data_ranges = None
-        no_data_range_labels = parameters[7].valueAsText
 
         # Where clause
         where = "Name = '" + name + "'"
@@ -552,18 +515,6 @@ class UpdateWROLayerInfo(object):
 ##                arcpy.AddMessage("\tOriginal: " + row[3])
 ##                arcpy.AddMessage("\tNew: " + metadata)
                 self.showMessages(row[3],metadata)
-            if no_data_ranges != row[4]:
-                changes = True
-                arcpy.AddMessage("NoDataValue:")
-##                arcpy.AddMessage("\tOriginal: " + row[4])
-##                arcpy.AddMessage("\tNew: " + no_data_ranges)
-                self.showMessages(row[4],no_data_ranges)
-            if no_data_range_labels != row[5]:
-                changes = True
-                arcpy.AddMessage("NoDataLabel:")
-##                arcpy.AddMessage("\tOriginal: " + row[5])
-##                arcpy.AddMessage("\tNew: " + no_data_range_labels)
-                self.showMessages(row[5],no_data_range_labels)
 
         # Update Mosaic Dataset table with values from tool UI
         if changes:
@@ -575,16 +526,12 @@ class UpdateWROLayerInfo(object):
                 url = None
             if metadata == "":
                 url = None
-            if no_data_ranges == "":
-                no_data_ranges = None
-            if no_data_range_labels == "":
-                no_data_range_labels = None
 
             # Update record with user-defined values
-            ##["Title", "Description", "Url", "Metadata", "NoDataRanges", "NoDataRangeLabels"]
+            ##["Title", "Description", "Url", "Metadata"]
             with arcpy.da.UpdateCursor(mosaic_dataset, self.mo_flds, where) as cur:
                 for row in cur:
-                    row = (title, description, url, metadata, no_data_ranges, no_data_range_labels)
+                    row = (title, description, url, metadata)
                     cur.updateRow(row)
         else:
             arcpy.AddMessage("No changes found")
