@@ -16,9 +16,8 @@
 #-------------------------------------------------------------------------------
 
 import arcpy
-import types
-import string, random, os, locale
-
+import locale
+import os
 import numpy as np
 
 # Set the resampling method environment to Nearest
@@ -41,10 +40,6 @@ class UpdateWROClassification(object):
         self.description = "Updates layer classification ranges in a weighted overlay mosaic."
         self.canRunInBackground = False
         self.mo_flds = ["Title", "RangeLabels", "InputRanges", "OutputValues"]
-        #id = None
-        #raster_path = None
-        #min_val = None
-        #max_val = None
 
 
     def getParameterInfo(self):
@@ -104,6 +99,14 @@ class UpdateWROClassification(object):
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
+        if (
+            all(parameters[i].altered for i in range(4))
+            and not any(parameters[i].hasBeenValidated for i in range(4))
+        ):
+            # Short-circuit updateParamers() when all parameters have been specified
+            # up front (e.g. via Python interface)
+            return
+
         if parameters[0].value:
 
             # Get list of layer names and populate WRO Mosaic Layer param
@@ -117,8 +120,6 @@ class UpdateWROClassification(object):
                 # Clear other params
                 parameters[2].value = None
                 parameters[3].value = None
-                parameters[4].value = None
-                #parameters[5].value = None
 
                 # Clear values
                 label_list = []
@@ -131,41 +132,36 @@ class UpdateWROClassification(object):
                 for fld in self.mo_flds:
                     if fld not in fld_list:
                         missing_flds.append(fld)
+
                 # If any fields are missing, show them in an error message
                 if missing_flds:
                     parameters[0].setErrorMessage("Missing fields {} in {}".format(missing_flds, parameters[0].valueAsText))
                     return
 
-
                 # Get Layer Title and Mosaic Layer Data values for user-selected Mosaic Layer (param 1)
                 if parameters[1].value: # and parameters[1].altered:
                     where = "Name = '" + parameters[1].valueAsText + "'"
-                    ##["Title", "RangeLabels", "InputRanges", "OutputValues"]
-                    with arcpy.da.SearchCursor(parameters[0].value, ["Title", "OID@", "RangeLabels", "InputRanges", "OutputValues"], where) as cur:
+                    with arcpy.da.SearchCursor(parameters[0].value, ["Title", "RangeLabels", "InputRanges", "OutputValues"], where) as cur:
                         row = cur.next()
-                        global id
-                        id = row[1]
-                        self._labels = row[2]
-                        self._ranges = row[3]
-                        self._output_values = row[4]
+                        self._labels = row[1]
+                        self._ranges = row[2]
+                        self._output_values = row[3]
 
                         if row[0]:
                             parameters[2].value = row[0]
+                        if row[1]:
+                            label_list = row[1].split(",")
                         if row[2]:
-                            label_list = row[2].split(",")
+                            range_list = row[2].split(",")
                         if row[3]:
-                            range_list = row[3].split(",")
-                        if row[4]:
-                            suitability_list = row[4].split(",")
+                            suitability_list = row[3].split(",")
 
                     # Write values to UI value table
-                    out_values = ""
+                    out_values = []
                     for i in range(len(label_list)):
-                        out_values += ('"{}" {} {} {} {}').format(label_list[i], range_list[i*2], range_list[i*2+1], suitability_list[i], ";")
+                        out_values.append([str(label_list[i]), float(range_list[i*2]), float(range_list[i*2+1]), int(suitability_list[i])])
 
-                    #parameters[5].value = out_values
                     parameters[3].value = out_values
-
 
         return
 
