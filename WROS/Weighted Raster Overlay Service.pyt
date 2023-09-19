@@ -141,7 +141,7 @@ class UpdateWROClassification(object):
                 # Get Layer Title and Mosaic Layer Data values for user-selected Mosaic Layer (param 1)
                 if parameters[1].value: # and parameters[1].altered:
                     where = "Name = '" + parameters[1].valueAsText + "'"
-                    with arcpy.da.SearchCursor(parameters[0].value, ["Title", "RangeLabels", "InputRanges", "OutputValues"], where) as cur:
+                    with arcpy.da.SearchCursor(parameters[0].value, self.mo_flds, where) as cur:
                         row = cur.next()
                         self._labels = row[1]
                         self._ranges = row[2]
@@ -158,7 +158,7 @@ class UpdateWROClassification(object):
 
                     # Write values to UI value table
                     out_values = []
-                    for i in range(len(label_list)):
+                    for i in range(len(suitability_list)):
                         out_values.append([str(label_list[i]), float(range_list[i*2]), float(range_list[i*2+1]), int(suitability_list[i])])
 
                     parameters[3].value = out_values
