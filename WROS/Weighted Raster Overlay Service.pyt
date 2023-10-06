@@ -23,6 +23,12 @@ import numpy as np
 # Set the resampling method environment to Nearest
 arcpy.env.resamplingMethod = "NEAREST"
 
+# Commas are used as the range label delimiter in WRO mosaic attribute tables,
+# and thus cannot be used within range labels. Define the delimiter character
+# and the substitution character as global variables.
+DELIMITER = ","
+DELIM_SUB = ";"
+
 class Toolbox(object):
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
@@ -31,7 +37,11 @@ class Toolbox(object):
         self.alias = "wroservice"
 
         # List of tool classes associated with this toolbox
-        self.tools = [CreateWeightedOverlayMosaic,UpdateWROLayerInfo,UpdateWROClassification]
+        self.tools = [
+            CreateWeightedOverlayMosaic,
+            UpdateWROLayerInfo,
+            UpdateWROClassification,
+        ]
 
 class UpdateWROClassification(object):
     def __init__(self):
@@ -72,7 +82,12 @@ class UpdateWROClassification(object):
         datatype="GPValueTable",
         parameterType="Required",
         direction="Input")
-        mosaic_lyr_data.columns = [['GPString','Range Label'],['GPDouble', 'Min Range'], ['GPDouble', 'Max Range'],['GPLong', 'Suitability Value']]
+        mosaic_lyr_data.columns = [
+            ['GPString','Range Label'],
+            ['GPDouble', 'Min Range'],
+            ['GPDouble', 'Max Range'],
+            ['GPLong', 'Suitability Value'],
+        ]
         mosaic_lyr_data.filters[3].type = "ValueList"
         mosaic_lyr_data.filters[3].list = [0,1,2,3,4,5,6,7,8,9]
 
@@ -82,11 +97,10 @@ class UpdateWROClassification(object):
         datatype="DEMosaicDataset",
         parameterType="Derived",
         direction="Output")
+        out_mosaic.parameterDependencies = [in_mosaic.name]
+        out_mosaic.schema.clone = True
 
-        out_mosaic.parameterDependencies=[in_mosaic.name]
-        out_mosaic.schema.clone=True
-
-        params = [in_mosaic ,wro_lyr, wro_title, mosaic_lyr_data, out_mosaic]
+        params = [in_mosaic, wro_lyr, wro_title, mosaic_lyr_data, out_mosaic]
 
         return params
 
@@ -177,25 +191,39 @@ class UpdateWROClassification(object):
                     missing_flds.append(fld)
             # If any fields are missing, show them in an error message
             if missing_flds:
-                parameters[0].setErrorMessage("Missing fields {} in {}".format(missing_flds, parameters[0].valueAsText))
-
+                parameters[0].setErrorMessage(
+                    "Missing fields {} in {}".format(
+                        missing_flds, parameters[0].valueAsText
+                    )
+                )
 
         # Verify max value of range matches min value of next range
+        # and check range labels for unsupported characters
         if parameters[3].value:
-            range_list = []
-            #for val in parameters[5].value:
+            range_labels = []
+            range_limits = []
             for val in parameters[3].value:
-                range_list.append(val[1])
-                range_list.append(val[2])
-            count = 1
-            while count < (len(range_list) - 1):
-                min = range_list[count]
-                max = range_list[count + 1]
-                if min != max:
-                    #parameters[5].setErrorMessage("Range values mismatch: " + str(min) + " and " + str(max))
-                    parameters[3].setErrorMessage("Range values mismatch: " + str(min) + " and " + str(max))
+                range_labels.append(val[0])
+                range_limits.append((val[1], val[2]))
+            for label in range_labels:
+                if DELIMITER in label:
+                    parameters[3].setWarningMessage(
+                        "Unsupported character '{}' in range labels will be replaced with '{}'".format(
+                            DELIMITER, DELIM_SUB
+                        )
+                    )
                     break
-                count += 2
+            for i in range(len(range_limits) - 1):
+                j = i + 1
+                range_i_max = range_limits[i][1]
+                range_j_min = range_limits[j][0]
+                if range_i_max != range_j_min:
+                    parameters[3].setErrorMessage(
+                        "Range values mismatch: {} and {}".format(
+                            range_i_max, range_j_min
+                        )
+                    )
+                    break
 
         return
 
@@ -209,19 +237,25 @@ class UpdateWROClassification(object):
         value_tbl = parameters[3].value
 
         # Where clause
-        where = "Name = '" + name + "'"
+        where = "Name = '{}'".format(name)
 
         # Read values from value table
-        ranges = ""
-        range_labels = ""
-        output_values = ""
-        for val in value_tbl:
-            ranges += str(val[1]) + "," + str(val[2]) + ","
-            range_labels += str(val[0]) + ","
-            output_values += str(val[3]) + ","
-        ranges = ranges[:-1]
-        range_labels = range_labels[:-1]
-        output_values = output_values[:-1]
+        range_limits = []
+        range_labels = []
+        output_values = []
+        for rng_lbl, rng_min, rng_max, suit_val in value_tbl:
+            if DELIMITER in rng_lbl:
+                arcpy.AddWarning(
+                    "Unsupported character '{}' in range label '{}' has been replaced with '{}'".format(
+                        DELIMITER, rng_lbl, DELIM_SUB
+                    )
+                )
+            range_limits.extend([str(rng_min), str(rng_max)])
+            range_labels.append(rng_lbl.replace(DELIMITER, DELIM_SUB))
+            output_values.append(str(suit_val))
+        range_limits = DELIMITER.join(range_limits)
+        range_labels = DELIMITER.join(range_labels)
+        output_values = DELIMITER.join(output_values)
 
         # Check for user changes
         changes = False
@@ -243,10 +277,10 @@ class UpdateWROClassification(object):
                 changes = True
                 arcpy.AddMessage("Range Labels:")
                 self.showMessages(row[1],range_labels)
-            if ranges != row[2]:
+            if range_limits != row[2]:
                 changes = True
                 arcpy.AddMessage("InputRanges:")
-                self.showMessages(row[2],ranges)
+                self.showMessages(row[2],range_limits)
             if output_values != row[3]:
                 changes = True
                 arcpy.AddMessage("OutputValues:")
@@ -299,7 +333,7 @@ class UpdateWROClassification(object):
             with arcpy.da.UpdateCursor(mosaic_dataset, self.mo_flds, where) as cur:
                 for row in cur:
                     try:
-                        row = (title, range_labels, ranges, output_values)
+                        row = (title, range_labels, range_limits, output_values)
                         cur.updateRow(row)
                     except Exception as eIns:
                         arcpy.AddWarning("An error occurred while updating the mosaic: " + self.GetErrorMessage(eIns))
