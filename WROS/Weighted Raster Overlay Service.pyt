@@ -797,7 +797,7 @@ class CreateWeightedOverlayMosaic(object):
             res = arcpy.CreateMosaicDataset_management(workspace,mosaicName,spatialref,'#', '#', 'NONE', '#')
 
         except Exception as e2:
-            arcpy.AddError("Error creating the mosaic {}:{} ".format(outMosaic,self.GetErrorMessage(e2)))
+            arcpy.AddError("Error creating the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e2)))
             return
 
         try:
@@ -813,7 +813,7 @@ class CreateWeightedOverlayMosaic(object):
             #     arcpy.AddMessage(arcpy.GetMessages())
 
         except Exception as e3:
-            arcpy.AddError("Error adding fields to the mosaic {}: ".format(outMosaic,self.GetErrorMessage(e3)))
+            arcpy.AddError("Error adding fields to the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e3)))
             return
 
         try:
@@ -823,7 +823,7 @@ class CreateWeightedOverlayMosaic(object):
             arcpy.AddMessage(arcpy.GetMessages())
 
         except Exception as e_resampling:
-            arcpy.AddError("Error setting resampling type {}: ".format(outMosaic,self.GetErrorMessage(e_resampling)))
+            arcpy.AddError("Error setting resampling type {}: {}".format(outMosaic,self.GetErrorMessage(e_resampling)))
             return
 
         try:
@@ -854,7 +854,7 @@ class CreateWeightedOverlayMosaic(object):
                 arcpy.AddMessage("Calculated statistics on mosaic dataset.")
 
         except Exception as e7:
-            arcpy.AddError("Error adding rasters to the mosaic {}: ".format(self.GetErrorMessage(e7)))
+            arcpy.AddError("Error adding rasters to the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e7)))
             return
 
         try:
@@ -886,7 +886,7 @@ class CreateWeightedOverlayMosaic(object):
             arcpy.SetParameter(2,outMosaic)
 
         except Exception as e4:
-            arcpy.AddError("Error adding data to the mosaic {}: ".format(outMosaic,self.GetErrorMessage(e4)))
+            arcpy.AddError("Error adding data to the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e4)))
             return
 
         return
