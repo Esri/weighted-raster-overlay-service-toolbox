@@ -24,9 +24,8 @@ import numpy as np
 arcpy.env.resamplingMethod = "NEAREST"
 
 # Commas are used as the range label delimiter in WRO mosaic attribute tables,
-# and thus cannot be used within range labels. Define the delimiter character
-# and the substitution character as global variables.
-DELIMITER = ","
+# and thus cannot be used within range labels. Define the delimiter substitution
+# character as a global variable.
 DELIM_SUB = ";"
 
 class Toolbox(object):
@@ -206,10 +205,10 @@ class UpdateWROClassification(object):
                 range_labels.append(val[0])
                 range_limits.append((val[1], val[2]))
             for label in range_labels:
-                if DELIMITER in label:
+                if "," in label:
                     parameters[3].setWarningMessage(
                         "Unsupported character '{}' in range labels will be replaced with '{}'".format(
-                            DELIMITER, DELIM_SUB
+                            ",", DELIM_SUB
                         )
                     )
                     break
@@ -244,18 +243,18 @@ class UpdateWROClassification(object):
         range_labels = []
         output_values = []
         for rng_lbl, rng_min, rng_max, suit_val in value_tbl:
-            if DELIMITER in rng_lbl:
+            if "," in rng_lbl:
                 arcpy.AddWarning(
                     "Unsupported character '{}' in range label '{}' has been replaced with '{}'".format(
-                        DELIMITER, rng_lbl, DELIM_SUB
+                        ",", rng_lbl, DELIM_SUB
                     )
                 )
             range_limits.extend([str(rng_min), str(rng_max)])
-            range_labels.append(rng_lbl.replace(DELIMITER, DELIM_SUB))
+            range_labels.append(rng_lbl.replace(",", DELIM_SUB))
             output_values.append(str(suit_val))
-        range_limits = DELIMITER.join(range_limits)
-        range_labels = DELIMITER.join(range_labels)
-        output_values = DELIMITER.join(output_values)
+        range_limits = ",".join(range_limits)
+        range_labels = ",".join(range_labels)
+        output_values = ",".join(output_values)
 
         # Check for user changes
         changes = False
@@ -1063,10 +1062,18 @@ class CreateWeightedOverlayMosaic(object):
                     for colorizerValue in vals:
                         if rasterValue[1].lower()==colorizerValue[0].lower():
                             # use the colorizerValue[1] (the label from the sym.colorizer) as our uvLabel
+                            lbl = colorizerValue[1]
+                            if "," in lbl:
+                                arcpy.AddWarning(
+                                    "Unsupported character '{}' in range label '{}' has been replaced with '{}'".format(
+                                        ",", lbl, DELIM_SUB
+                                    )
+                                )
+                                lbl = lbl.replace(",", DELIM_SUB)
                             if len(uvLabels) < 1:
-                                uvLabels='{}'.format(colorizerValue[1])
+                                uvLabels='{}'.format(lbl)
                             else:
-                                uvLabels+=',{}'.format(colorizerValue[1])
+                                uvLabels+=',{}'.format(lbl)
 
                     # create a comma-delimited list of output values
                     # for now, all output values are set to 5
@@ -1082,16 +1089,19 @@ class CreateWeightedOverlayMosaic(object):
                 for grp in symb.colorizer.groups:
                     for itm in grp.items:
                         try:
-                            v1=""
-                            lbl=""
-
                             # handle locale setting for seperators (,.) in numbers
-                            if locale.getlocale()==('English_United States', '1252'):
-                                v1=''.join(e for e in itm.values[0] if e.isdigit() or e == '.')
-                                lbl =''.join(e for e in itm.label if e.isdigit() or e == '.')
-                            else:
-                                v1=''.join(e for e in itm.values[0] if e.isdigit() or e == ',')
-                                lbl =''.join(e for e in itm.label if e.isdigit() or e == ',')
+                            locale_decimal = locale.localeconv()["decimal_point"]
+                            v1 = "".join(e for e in itm.values[0] if e.isdigit() or e == locale_decimal)
+                            lbl = "".join(e for e in itm.label if e.isdigit() or e == locale_decimal)
+                            
+                            # Replace commas in range labels
+                            if "," in lbl:
+                                arcpy.AddWarning(
+                                    "Unsupported character '{}' in range label '{}' has been replaced with '{}'".format(
+                                        ",", lbl, DELIM_SUB
+                                    )
+                                )
+                                lbl = lbl.replace(",", DELIM_SUB)
 
                             # build two lists of unique values
                             inRngs1.append(float(v1))
@@ -1286,7 +1296,7 @@ class CreateWeightedOverlayMosaic(object):
                             else:
                                 # set outputValues and Range Labels
                                 outputValues="1,3,5,7,9"
-                                labels="Very Low, Low, Medium, High, Very High"
+                                labels="Very Low,Low,Medium,High,Very High"
 
                         rasData=(rastertitle,inputRanges,outputValues,labels,rasterFileName,l)
                         lyrData.append(rasData)
