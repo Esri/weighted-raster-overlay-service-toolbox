@@ -82,7 +82,7 @@ class UpdateWROClassification(object):
         parameterType="Required",
         direction="Input")
         mosaic_lyr_data.columns = [
-            ['GPString','Range Label'],
+            ['GPString', 'Range Label'],
             ['GPDouble', 'Min Range'],
             ['GPDouble', 'Max Range'],
             ['GPLong', 'Suitability Value'],
@@ -100,7 +100,6 @@ class UpdateWROClassification(object):
         out_mosaic.schema.clone = True
 
         params = [in_mosaic, wro_lyr, wro_title, mosaic_lyr_data, out_mosaic]
-
         return params
 
     def isLicensed(self):
@@ -152,8 +151,8 @@ class UpdateWROClassification(object):
                     return
 
                 # Get Layer Title and Mosaic Layer Data values for user-selected Mosaic Layer (param 1)
-                if parameters[1].value: # and parameters[1].altered:
-                    where = "Name = '" + parameters[1].valueAsText + "'"
+                if parameters[1].value:
+                    where = "Name = '{}'".format(parameters[1].valueAsText)
                     with arcpy.da.SearchCursor(parameters[0].value, self.mo_flds, where) as cur:
                         row = cur.next()
                         self._labels = row[1]
@@ -172,7 +171,12 @@ class UpdateWROClassification(object):
                     # Write values to UI value table
                     out_values = []
                     for i in range(len(suitability_list)):
-                        out_values.append([str(label_list[i]), float(range_list[i*2]), float(range_list[i*2+1]), int(suitability_list[i])])
+                        out_values.append([
+                            str(label_list[i]),        # Range label
+                            float(range_list[i*2]),    # Range min
+                            float(range_list[i*2+1]),  # Range max
+                            int(suitability_list[i]),  # Suitability value
+                        ])
 
                     parameters[3].value = out_values
 
@@ -207,9 +211,7 @@ class UpdateWROClassification(object):
             for label in range_labels:
                 if "," in label:
                     parameters[3].setWarningMessage(
-                        "Unsupported character '{}' in range labels will be replaced with '{}'".format(
-                            ",", DELIM_SUB
-                        )
+                        "Unsupported character ',' in range labels will be replaced with '{}'".format(DELIM_SUB)
                     )
                     break
             for i in range(len(range_limits) - 1):
@@ -245,12 +247,11 @@ class UpdateWROClassification(object):
         for rng_lbl, rng_min, rng_max, suit_val in value_tbl:
             if "," in rng_lbl:
                 arcpy.AddWarning(
-                    "Unsupported character '{}' in range label '{}' has been replaced with '{}'".format(
-                        ",", rng_lbl, DELIM_SUB
-                    )
+                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(rng_lbl, DELIM_SUB)
                 )
+                rng_lbl = rng_lbl.replace(",", DELIM_SUB)
             range_limits.extend([str(rng_min), str(rng_max)])
-            range_labels.append(rng_lbl.replace(",", DELIM_SUB))
+            range_labels.append(rng_lbl)
             output_values.append(str(suit_val))
         range_limits = ",".join(range_limits)
         range_labels = ",".join(range_labels)
@@ -585,16 +586,39 @@ class CreateWeightedOverlayMosaic(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Create Weighted Overlay Mosaic"
-        self.description = "Creates a new mosaic dataset that you can use to share as a weighted raster overlay service on ArcGIS Online or your portal."
-        self.description += "The output mosaic dataset contains the raster layers in the input map document."
+        self.description = (
+            "Creates a new mosaic dataset that you can use to share as a weighted "
+            "raster overlay service on ArcGIS Online or your portal. The output "
+            "mosaic dataset contains the raster layers in the input map document."
+        )
         self.canRunInBackground = False
-        self.inTableSchema=["title","rasterPath","Label","minRangeValue","maxRangeValue","SuitabilityVal","Description","NoDataVal","NoDataLabel","URL"]
-        self.outMoFields=[('Title','String',1024),('Description','String',1024),('Url','String',1024),('InputRanges','String',2048),('NoDataRanges','String',256),('RangeLabels','String',1024),('NoDataRangeLabels','String',1024),('OutputValues','String',256),('Metadata','String',1024),('dataset_id','String',1024)]
-        self.updMoFields=["Title","RangeLabels","InputRanges","OutputValues"]
-        self.updMoFieldsQuery=["Name"]
-        self.resampling='NEAREST'
-
-        self.outMoFields2=[['Title','TEXT','Title',1024],['Description','TEXT','Description',1024],['Url','TEXT','Url',1024],['InputRanges','TEXT','InputRanges',2048],['NoDataRanges','TEXT','NoDataRanges',256],['RangeLabels','TEXT','RangeLabels',1024],['NoDataRangeLabels','TEXT','NoDataRangeLabels',1024],['OutputValues','TEXT','OutputValues',256],['Metadata','TEXT','Metadata',1024],['dataset_id','TEXT','dataset_id',1024]]
+        self.inTableSchema = [
+            "title",
+            "rasterPath",
+            "Label",
+            "minRangeValue",
+            "maxRangeValue",
+            "SuitabilityVal",
+            "Description",
+            "NoDataVal",
+            "NoDataLabel",
+            "URL",
+        ]
+        self.outMoFields = [
+            ['Title', 'TEXT', 'Title', 1024],
+            ['Description', 'TEXT', 'Description', 1024],
+            ['Url', 'TEXT', 'Url', 1024],
+            ['InputRanges', 'TEXT', 'InputRanges', 2048],
+            ['NoDataRanges', 'TEXT', 'NoDataRanges', 256],
+            ['RangeLabels', 'TEXT', 'RangeLabels', 1024],
+            ['NoDataRangeLabels', 'TEXT', 'NoDataRangeLabels', 1024],
+            ['OutputValues', 'TEXT', 'OutputValues', 256],
+            ['Metadata', 'TEXT', 'Metadata', 1024],
+            ['dataset_id', 'TEXT', 'dataset_id', 1024],
+        ]
+        self.updMoFields = ["Title", "RangeLabels", "InputRanges", "OutputValues"]
+        self.updMoFieldsQuery = ["Name"]
+        self.resampling = 'NEAREST'
 
 
     def getParameterInfo(self):
@@ -802,14 +826,7 @@ class CreateWeightedOverlayMosaic(object):
         try:
             # create additional fields for the mosaic
             arcpy.AddMessage("Adding weighted overlay fields to the mosaic dataset...")
-            arcpy.AddFields_management(outMosaic,self.outMoFields2)
-            # for fldDef in self.outMoFields:
-            #     fname=fldDef[0]
-            #     ftype=fldDef[1]
-            #     flength=fldDef[2]
-
-            #     arcpy.AddField_management(outMosaic,fname,ftype,field_length=flength)
-            #     arcpy.AddMessage(arcpy.GetMessages())
+            arcpy.AddFields_management(outMosaic, self.outMoFields)
 
         except Exception as e3:
             arcpy.AddError("Error adding fields to the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e3)))
@@ -1065,9 +1082,7 @@ class CreateWeightedOverlayMosaic(object):
                             lbl = colorizerValue[1]
                             if "," in lbl:
                                 arcpy.AddWarning(
-                                    "Unsupported character '{}' in range label '{}' has been replaced with '{}'".format(
-                                        ",", lbl, DELIM_SUB
-                                    )
+                                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(lbl, DELIM_SUB)
                                 )
                                 lbl = lbl.replace(",", DELIM_SUB)
                             if len(uvLabels) < 1:
@@ -1097,9 +1112,7 @@ class CreateWeightedOverlayMosaic(object):
                             # Replace commas in range labels
                             if "," in lbl:
                                 arcpy.AddWarning(
-                                    "Unsupported character '{}' in range label '{}' has been replaced with '{}'".format(
-                                        ",", lbl, DELIM_SUB
-                                    )
+                                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(lbl, DELIM_SUB)
                                 )
                                 lbl = lbl.replace(",", DELIM_SUB)
 
@@ -1213,7 +1226,7 @@ class CreateWeightedOverlayMosaic(object):
                             idx = rasterFileName.rfind("/") 
                             if (idx != -1):
                                 rasterFileName = rasterFileName[idx+1:len(rasterFileName)]
-                            arcpy.AddMessage("rasterFileNameeeeeeeeeee "+rasterFileName)
+                            arcpy.AddMessage("rasterFileName {}".format(rasterFileName))
 
                         # describe the raster to get its no data values & other info
                         desc=arcpy.Describe(l)
