@@ -23,6 +23,11 @@ import numpy as np
 # Set the resampling method environment to Nearest
 arcpy.env.resamplingMethod = "NEAREST"
 
+# Commas are used as the range label delimiter in WRO mosaic attribute tables,
+# and thus cannot be used within range labels. Define the delimiter substitution
+# character as a global variable.
+DELIM_SUB = ";"
+
 class Toolbox(object):
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
@@ -31,7 +36,11 @@ class Toolbox(object):
         self.alias = "wroservice"
 
         # List of tool classes associated with this toolbox
-        self.tools = [CreateWeightedOverlayMosaic,UpdateWROLayerInfo,UpdateWROClassification]
+        self.tools = [
+            CreateWeightedOverlayMosaic,
+            UpdateWROLayerInfo,
+            UpdateWROClassification,
+        ]
 
 class UpdateWROClassification(object):
     def __init__(self):
@@ -72,7 +81,12 @@ class UpdateWROClassification(object):
         datatype="GPValueTable",
         parameterType="Required",
         direction="Input")
-        mosaic_lyr_data.columns = [['GPString','Range Label'],['GPDouble', 'Min Range'], ['GPDouble', 'Max Range'],['GPLong', 'Suitability Value']]
+        mosaic_lyr_data.columns = [
+            ['GPString', 'Range Label'],
+            ['GPDouble', 'Min Range'],
+            ['GPDouble', 'Max Range'],
+            ['GPLong', 'Suitability Value'],
+        ]
         mosaic_lyr_data.filters[3].type = "ValueList"
         mosaic_lyr_data.filters[3].list = [0,1,2,3,4,5,6,7,8,9]
 
@@ -82,12 +96,10 @@ class UpdateWROClassification(object):
         datatype="DEMosaicDataset",
         parameterType="Derived",
         direction="Output")
+        out_mosaic.parameterDependencies = [in_mosaic.name]
+        out_mosaic.schema.clone = True
 
-        out_mosaic.parameterDependencies=[in_mosaic.name]
-        out_mosaic.schema.clone=True
-
-        params = [in_mosaic ,wro_lyr, wro_title, mosaic_lyr_data, out_mosaic]
-
+        params = [in_mosaic, wro_lyr, wro_title, mosaic_lyr_data, out_mosaic]
         return params
 
     def isLicensed(self):
@@ -139,9 +151,9 @@ class UpdateWROClassification(object):
                     return
 
                 # Get Layer Title and Mosaic Layer Data values for user-selected Mosaic Layer (param 1)
-                if parameters[1].value: # and parameters[1].altered:
-                    where = "Name = '" + parameters[1].valueAsText + "'"
-                    with arcpy.da.SearchCursor(parameters[0].value, ["Title", "RangeLabels", "InputRanges", "OutputValues"], where) as cur:
+                if parameters[1].value:
+                    where = "Name = '{}'".format(parameters[1].valueAsText)
+                    with arcpy.da.SearchCursor(parameters[0].value, self.mo_flds, where) as cur:
                         row = cur.next()
                         self._labels = row[1]
                         self._ranges = row[2]
@@ -158,8 +170,13 @@ class UpdateWROClassification(object):
 
                     # Write values to UI value table
                     out_values = []
-                    for i in range(len(label_list)):
-                        out_values.append([str(label_list[i]), float(range_list[i*2]), float(range_list[i*2+1]), int(suitability_list[i])])
+                    for i in range(len(suitability_list)):
+                        out_values.append([
+                            str(label_list[i]),        # Range label
+                            float(range_list[i*2]),    # Range min
+                            float(range_list[i*2+1]),  # Range max
+                            int(suitability_list[i]),  # Suitability value
+                        ])
 
                     parameters[3].value = out_values
 
@@ -177,25 +194,37 @@ class UpdateWROClassification(object):
                     missing_flds.append(fld)
             # If any fields are missing, show them in an error message
             if missing_flds:
-                parameters[0].setErrorMessage("Missing fields {} in {}".format(missing_flds, parameters[0].valueAsText))
-
+                parameters[0].setErrorMessage(
+                    "Missing fields {} in {}".format(
+                        missing_flds, parameters[0].valueAsText
+                    )
+                )
 
         # Verify max value of range matches min value of next range
+        # and check range labels for unsupported characters
         if parameters[3].value:
-            range_list = []
-            #for val in parameters[5].value:
+            range_labels = []
+            range_limits = []
             for val in parameters[3].value:
-                range_list.append(val[1])
-                range_list.append(val[2])
-            count = 1
-            while count < (len(range_list) - 1):
-                min = range_list[count]
-                max = range_list[count + 1]
-                if min != max:
-                    #parameters[5].setErrorMessage("Range values mismatch: " + str(min) + " and " + str(max))
-                    parameters[3].setErrorMessage("Range values mismatch: " + str(min) + " and " + str(max))
+                range_labels.append(val[0])
+                range_limits.append((val[1], val[2]))
+            for label in range_labels:
+                if "," in label:
+                    parameters[3].setWarningMessage(
+                        "Unsupported character ',' in range labels will be replaced with '{}'".format(DELIM_SUB)
+                    )
                     break
-                count += 2
+            for i in range(len(range_limits) - 1):
+                j = i + 1
+                range_i_max = range_limits[i][1]
+                range_j_min = range_limits[j][0]
+                if range_i_max != range_j_min:
+                    parameters[3].setErrorMessage(
+                        "Range values mismatch: {} and {}".format(
+                            range_i_max, range_j_min
+                        )
+                    )
+                    break
 
         return
 
@@ -209,19 +238,24 @@ class UpdateWROClassification(object):
         value_tbl = parameters[3].value
 
         # Where clause
-        where = "Name = '" + name + "'"
+        where = "Name = '{}'".format(name)
 
         # Read values from value table
-        ranges = ""
-        range_labels = ""
-        output_values = ""
-        for val in value_tbl:
-            ranges += str(val[1]) + "," + str(val[2]) + ","
-            range_labels += str(val[0]) + ","
-            output_values += str(val[3]) + ","
-        ranges = ranges[:-1]
-        range_labels = range_labels[:-1]
-        output_values = output_values[:-1]
+        range_limits = []
+        range_labels = []
+        output_values = []
+        for rng_lbl, rng_min, rng_max, suit_val in value_tbl:
+            if "," in rng_lbl:
+                arcpy.AddWarning(
+                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(rng_lbl, DELIM_SUB)
+                )
+                rng_lbl = rng_lbl.replace(",", DELIM_SUB)
+            range_limits.extend([str(rng_min), str(rng_max)])
+            range_labels.append(rng_lbl)
+            output_values.append(str(suit_val))
+        range_limits = ",".join(range_limits)
+        range_labels = ",".join(range_labels)
+        output_values = ",".join(output_values)
 
         # Check for user changes
         changes = False
@@ -243,10 +277,10 @@ class UpdateWROClassification(object):
                 changes = True
                 arcpy.AddMessage("Range Labels:")
                 self.showMessages(row[1],range_labels)
-            if ranges != row[2]:
+            if range_limits != row[2]:
                 changes = True
                 arcpy.AddMessage("InputRanges:")
-                self.showMessages(row[2],ranges)
+                self.showMessages(row[2],range_limits)
             if output_values != row[3]:
                 changes = True
                 arcpy.AddMessage("OutputValues:")
@@ -299,7 +333,7 @@ class UpdateWROClassification(object):
             with arcpy.da.UpdateCursor(mosaic_dataset, self.mo_flds, where) as cur:
                 for row in cur:
                     try:
-                        row = (title, range_labels, ranges, output_values)
+                        row = (title, range_labels, range_limits, output_values)
                         cur.updateRow(row)
                     except Exception as eIns:
                         arcpy.AddWarning("An error occurred while updating the mosaic: " + self.GetErrorMessage(eIns))
@@ -552,16 +586,39 @@ class CreateWeightedOverlayMosaic(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Create Weighted Overlay Mosaic"
-        self.description = "Creates a new mosaic dataset that you can use to share as a weighted raster overlay service on ArcGIS Online or your portal."
-        self.description += "The output mosaic dataset contains the raster layers in the input map document."
+        self.description = (
+            "Creates a new mosaic dataset that you can use to share as a weighted "
+            "raster overlay service on ArcGIS Online or your portal. The output "
+            "mosaic dataset contains the raster layers in the input map document."
+        )
         self.canRunInBackground = False
-        self.inTableSchema=["title","rasterPath","Label","minRangeValue","maxRangeValue","SuitabilityVal","Description","NoDataVal","NoDataLabel","URL"]
-        self.outMoFields=[('Title','String',1024),('Description','String',1024),('Url','String',1024),('InputRanges','String',2048),('NoDataRanges','String',256),('RangeLabels','String',1024),('NoDataRangeLabels','String',1024),('OutputValues','String',256),('Metadata','String',1024),('dataset_id','String',1024)]
-        self.updMoFields=["Title","RangeLabels","InputRanges","OutputValues"]
-        self.updMoFieldsQuery=["Name"]
-        self.resampling='NEAREST'
-
-        self.outMoFields2=[['Title','TEXT','Title',1024],['Description','TEXT','Description',1024],['Url','TEXT','Url',1024],['InputRanges','TEXT','InputRanges',2048],['NoDataRanges','TEXT','NoDataRanges',256],['RangeLabels','TEXT','RangeLabels',1024],['NoDataRangeLabels','TEXT','NoDataRangeLabels',1024],['OutputValues','TEXT','OutputValues',256],['Metadata','TEXT','Metadata',1024],['dataset_id','TEXT','dataset_id',1024]]
+        self.inTableSchema = [
+            "title",
+            "rasterPath",
+            "Label",
+            "minRangeValue",
+            "maxRangeValue",
+            "SuitabilityVal",
+            "Description",
+            "NoDataVal",
+            "NoDataLabel",
+            "URL",
+        ]
+        self.outMoFields = [
+            ['Title', 'TEXT', 'Title', 1024],
+            ['Description', 'TEXT', 'Description', 1024],
+            ['Url', 'TEXT', 'Url', 1024],
+            ['InputRanges', 'TEXT', 'InputRanges', 2048],
+            ['NoDataRanges', 'TEXT', 'NoDataRanges', 256],
+            ['RangeLabels', 'TEXT', 'RangeLabels', 1024],
+            ['NoDataRangeLabels', 'TEXT', 'NoDataRangeLabels', 1024],
+            ['OutputValues', 'TEXT', 'OutputValues', 256],
+            ['Metadata', 'TEXT', 'Metadata', 1024],
+            ['dataset_id', 'TEXT', 'dataset_id', 1024],
+        ]
+        self.updMoFields = ["Title", "RangeLabels", "InputRanges", "OutputValues"]
+        self.updMoFieldsQuery = ["Name"]
+        self.resampling = 'NEAREST'
 
 
     def getParameterInfo(self):
@@ -763,23 +820,16 @@ class CreateWeightedOverlayMosaic(object):
             res = arcpy.CreateMosaicDataset_management(workspace,mosaicName,spatialref,'#', '#', 'NONE', '#')
 
         except Exception as e2:
-            arcpy.AddError("Error creating the mosaic {}:{} ".format(outMosaic,self.GetErrorMessage(e2)))
+            arcpy.AddError("Error creating the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e2)))
             return
 
         try:
             # create additional fields for the mosaic
             arcpy.AddMessage("Adding weighted overlay fields to the mosaic dataset...")
-            arcpy.AddFields_management(outMosaic,self.outMoFields2)
-            # for fldDef in self.outMoFields:
-            #     fname=fldDef[0]
-            #     ftype=fldDef[1]
-            #     flength=fldDef[2]
-
-            #     arcpy.AddField_management(outMosaic,fname,ftype,field_length=flength)
-            #     arcpy.AddMessage(arcpy.GetMessages())
+            arcpy.AddFields_management(outMosaic, self.outMoFields)
 
         except Exception as e3:
-            arcpy.AddError("Error adding fields to the mosaic {}: ".format(outMosaic,self.GetErrorMessage(e3)))
+            arcpy.AddError("Error adding fields to the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e3)))
             return
 
         try:
@@ -789,7 +839,7 @@ class CreateWeightedOverlayMosaic(object):
             arcpy.AddMessage(arcpy.GetMessages())
 
         except Exception as e_resampling:
-            arcpy.AddError("Error setting resampling type {}: ".format(outMosaic,self.GetErrorMessage(e_resampling)))
+            arcpy.AddError("Error setting resampling type {}: {}".format(outMosaic,self.GetErrorMessage(e_resampling)))
             return
 
         try:
@@ -820,7 +870,7 @@ class CreateWeightedOverlayMosaic(object):
                 arcpy.AddMessage("Calculated statistics on mosaic dataset.")
 
         except Exception as e7:
-            arcpy.AddError("Error adding rasters to the mosaic {}: ".format(self.GetErrorMessage(e7)))
+            arcpy.AddError("Error adding rasters to the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e7)))
             return
 
         try:
@@ -852,7 +902,7 @@ class CreateWeightedOverlayMosaic(object):
             arcpy.SetParameter(2,outMosaic)
 
         except Exception as e4:
-            arcpy.AddError("Error adding data to the mosaic {}: ".format(outMosaic,self.GetErrorMessage(e4)))
+            arcpy.AddError("Error adding data to the mosaic {}: {}".format(outMosaic,self.GetErrorMessage(e4)))
             return
 
         return
@@ -1029,10 +1079,16 @@ class CreateWeightedOverlayMosaic(object):
                     for colorizerValue in vals:
                         if rasterValue[1].lower()==colorizerValue[0].lower():
                             # use the colorizerValue[1] (the label from the sym.colorizer) as our uvLabel
+                            lbl = colorizerValue[1]
+                            if "," in lbl:
+                                arcpy.AddWarning(
+                                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(lbl, DELIM_SUB)
+                                )
+                                lbl = lbl.replace(",", DELIM_SUB)
                             if len(uvLabels) < 1:
-                                uvLabels='{}'.format(colorizerValue[1])
+                                uvLabels='{}'.format(lbl)
                             else:
-                                uvLabels+=',{}'.format(colorizerValue[1])
+                                uvLabels+=',{}'.format(lbl)
 
                     # create a comma-delimited list of output values
                     # for now, all output values are set to 5
@@ -1048,16 +1104,17 @@ class CreateWeightedOverlayMosaic(object):
                 for grp in symb.colorizer.groups:
                     for itm in grp.items:
                         try:
-                            v1=""
-                            lbl=""
-
                             # handle locale setting for seperators (,.) in numbers
-                            if locale.getlocale()==('English_United States', '1252'):
-                                v1=''.join(e for e in itm.values[0] if e.isdigit() or e == '.')
-                                lbl =''.join(e for e in itm.label if e.isdigit() or e == '.')
-                            else:
-                                v1=''.join(e for e in itm.values[0] if e.isdigit() or e == ',')
-                                lbl =''.join(e for e in itm.label if e.isdigit() or e == ',')
+                            locale_decimal = locale.localeconv()["decimal_point"]
+                            v1 = "".join(e for e in itm.values[0] if e.isdigit() or e == locale_decimal)
+                            lbl = "".join(e for e in itm.label if e.isdigit() or e == locale_decimal)
+                            
+                            # Replace commas in range labels
+                            if "," in lbl:
+                                arcpy.AddWarning(
+                                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(lbl, DELIM_SUB)
+                                )
+                                lbl = lbl.replace(",", DELIM_SUB)
 
                             # build two lists of unique values
                             inRngs1.append(float(v1))
@@ -1169,7 +1226,7 @@ class CreateWeightedOverlayMosaic(object):
                             idx = rasterFileName.rfind("/") 
                             if (idx != -1):
                                 rasterFileName = rasterFileName[idx+1:len(rasterFileName)]
-                            arcpy.AddMessage("rasterFileNameeeeeeeeeee "+rasterFileName)
+                            arcpy.AddMessage("rasterFileName {}".format(rasterFileName))
 
                         # describe the raster to get its no data values & other info
                         desc=arcpy.Describe(l)
@@ -1252,7 +1309,7 @@ class CreateWeightedOverlayMosaic(object):
                             else:
                                 # set outputValues and Range Labels
                                 outputValues="1,3,5,7,9"
-                                labels="Very Low, Low, Medium, High, Very High"
+                                labels="Very Low,Low,Medium,High,Very High"
 
                         rasData=(rastertitle,inputRanges,outputValues,labels,rasterFileName,l)
                         lyrData.append(rasData)
