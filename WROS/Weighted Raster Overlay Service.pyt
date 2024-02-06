@@ -19,14 +19,10 @@ import arcpy
 import locale
 import os
 import numpy as np
+from csv import reader
 
 # Set the resampling method environment to Nearest
 arcpy.env.resamplingMethod = "NEAREST"
-
-# Commas are used as the range label delimiter in WRO mosaic attribute tables,
-# and thus cannot be used within range labels. Define the delimiter substitution
-# character as a global variable.
-DELIM_SUB = ";"
 
 class Toolbox(object):
     def __init__(self):
@@ -162,7 +158,7 @@ class UpdateWROClassification(object):
                         if row[0]:
                             parameters[2].value = row[0]
                         if row[1]:
-                            label_list = row[1].split(",")
+                            label_list = csv_string_to_list(row[1])
                         if row[2]:
                             range_list = row[2].split(",")
                         if row[3]:
@@ -208,12 +204,6 @@ class UpdateWROClassification(object):
             for val in parameters[3].value:
                 range_labels.append(val[0])
                 range_limits.append((val[1], val[2]))
-            for label in range_labels:
-                if "," in label:
-                    parameters[3].setWarningMessage(
-                        "Unsupported character ',' in range labels will be replaced with '{}'".format(DELIM_SUB)
-                    )
-                    break
             for i in range(len(range_limits) - 1):
                 j = i + 1
                 range_i_max = range_limits[i][1]
@@ -241,21 +231,16 @@ class UpdateWROClassification(object):
         where = "Name = '{}'".format(name)
 
         # Read values from value table
-        range_limits = []
-        range_labels = []
-        output_values = []
+        range_limit_list = []
+        range_label_list = []
+        output_value_list = []
         for rng_lbl, rng_min, rng_max, suit_val in value_tbl:
-            if "," in rng_lbl:
-                arcpy.AddWarning(
-                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(rng_lbl, DELIM_SUB)
-                )
-                rng_lbl = rng_lbl.replace(",", DELIM_SUB)
-            range_limits.extend([str(rng_min), str(rng_max)])
-            range_labels.append(rng_lbl)
-            output_values.append(str(suit_val))
-        range_limits = ",".join(range_limits)
-        range_labels = ",".join(range_labels)
-        output_values = ",".join(output_values)
+            range_limit_list.extend([str(rng_min), str(rng_max)])
+            range_label_list.append(rng_lbl)
+            output_value_list.append(str(suit_val))
+        range_limits = ",".join(range_limit_list)
+        range_labels = list_to_csv_string(range_label_list)
+        output_values = ",".join(output_value_list)
 
         # Check for user changes
         changes = False
@@ -1070,6 +1055,7 @@ class CreateWeightedOverlayMosaic(object):
                     return False, "",[], ""
 
                 # iterate through rasterValues and reach into vals to build a list of input ranges, outVals and uvLabels
+                uvLabel_list = []
                 for rasterValue in rasterVals:
                     # format input ranges
                     inRngs1.append(float(rasterValue[0]))
@@ -1079,16 +1065,7 @@ class CreateWeightedOverlayMosaic(object):
                     for colorizerValue in vals:
                         if rasterValue[1].lower()==colorizerValue[0].lower():
                             # use the colorizerValue[1] (the label from the sym.colorizer) as our uvLabel
-                            lbl = colorizerValue[1]
-                            if "," in lbl:
-                                arcpy.AddWarning(
-                                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(lbl, DELIM_SUB)
-                                )
-                                lbl = lbl.replace(",", DELIM_SUB)
-                            if len(uvLabels) < 1:
-                                uvLabels='{}'.format(lbl)
-                            else:
-                                uvLabels+=',{}'.format(lbl)
+                            uvLabel_list.append(colorizerValue[1])
 
                     # create a comma-delimited list of output values
                     # for now, all output values are set to 5
@@ -1098,9 +1075,11 @@ class CreateWeightedOverlayMosaic(object):
                         outVals+=',5'
 
                 worked, uvRngs = this.createInputRangesForRemap(inRngs1,inRngs2)
+                uvLabels = list_to_csv_string(uvLabel_list)
 
             else:
                 # Colorizer symbolizes on Value field
+                uvLabel_list = []
                 for grp in symb.colorizer.groups:
                     for itm in grp.items:
                         try:
@@ -1108,23 +1087,11 @@ class CreateWeightedOverlayMosaic(object):
                             locale_decimal = locale.localeconv()["decimal_point"]
                             v1 = "".join(e for e in itm.values[0] if e.isdigit() or e == locale_decimal)
                             lbl = "".join(e for e in itm.label if e.isdigit() or e == locale_decimal)
-                            
-                            # Replace commas in range labels
-                            if "," in lbl:
-                                arcpy.AddWarning(
-                                    "Unsupported character ',' in range label '{}' has been replaced with '{}'".format(lbl, DELIM_SUB)
-                                )
-                                lbl = lbl.replace(",", DELIM_SUB)
+                            uvLabel_list.append(lbl)
 
                             # build two lists of unique values
                             inRngs1.append(float(v1))
                             inRngs2.append(float(v1))
-
-                            # Create a comma-delimited list of labels
-                            if len(uvLabels) < 1:
-                                uvLabels='{}'.format(lbl)
-                            else:
-                                uvLabels+=',{}'.format(lbl)
 
                             # create a comma-delimited list of output values
                             # for now, all output values are set to 5
@@ -1138,6 +1105,7 @@ class CreateWeightedOverlayMosaic(object):
 
                 # format list unique values into comma delimited string of min-inclusive/max-exclusive values
                 worked, uvRngs = this.createInputRangesForRemap(inRngs1,inRngs2)
+                uvLabels = list_to_csv_string(uvLabel_list)
 
             return worked, uvRngs, outVals, uvLabels
 
@@ -1333,3 +1301,32 @@ class CreateWeightedOverlayMosaic(object):
             return e.message
         else:
             return e
+
+
+# Helper functions
+
+def list_to_csv_string(in_list):
+    """Converts a list of values into a CSV-formatted string following
+    the RFC 4180 spec: <https://datatracker.ietf.org/doc/html/rfc4180>
+    """
+    out_vals = []
+    for in_val in in_list:
+        if in_val is None:
+            out_vals.append("")
+            continue
+        val = str(in_val).strip()
+        # Apply CSV formatting conventions when value contains , or "
+        if '"' in val or "," in val:
+            if '"' in val:
+                val = val.replace('"', '""')
+            val = '"{}"'.format(val)
+        out_vals.append(val)
+    out_str = ",".join(out_vals)
+    return out_str
+
+
+def csv_string_to_list(in_string):
+    """Parses values from a CSV-formatted string using the RFC 4180 spec:
+    <https://datatracker.ietf.org/doc/html/rfc4180>
+    """
+    return list(reader([in_string]))[0]
