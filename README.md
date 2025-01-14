@@ -1,5 +1,5 @@
 # Weighted-raster-overlay-service toolbox
-This python toolbox contains analysis tools that help prepare and configure data for a weighted overlay service. The tools apply the proper fields, properties, and metadata to your raster layers and mosaic dataset. The service can be used in web-based apps such as ArcGIS GeoPlanner, ArcGIS Web AppBuilder, and ArcGIS Experience Builder.
+This python toolbox contains analysis tools that help prepare and configure data for a weighted overlay service. The tools apply the proper fields, properties, and metadata to your raster layers and mosaic dataset. The service can be used in web-based apps such as ArcGIS Experience Builder.
 
 ![image](https://user-images.githubusercontent.com/59451655/175434439-66f9121e-0866-46c7-bb8d-5569d595518e.png)
 
@@ -24,10 +24,6 @@ The toolbox contains the three aforementioned script tools.
 
 ## Resources
 
-* [GeoPlanner documentation](https://doc.arcgis.com/en/geoplanner/latest/documentation/)
-* [Understanding weighted overlay in GeoPlanner](https://doc.arcgis.com/en/geoplanner/latest/documentation/find-the-best-place-using-weighted-overlay.htm)
-* [Build your own weighted raster overlay service](https://doc.arcgis.com/en/geoplanner/latest/documentation/use-your-data-in-weighted-overlay-portal-.htm)
-* [ArcGIS Web AppBuilder Suitability Modeler Widget](https://doc.arcgis.com/en/web-appbuilder/create-apps/widget-suitability-modeler.htm)
 * [ArcGIS Experience Builder Suitability Modeler Widget](https://doc.arcgis.com/en/experience-builder/configure-widgets/suitability-modeler-widget.htm)
 
 ## Issues
@@ -39,7 +35,7 @@ Find a bug or want to request a new feature?  Please let us know by submitting a
 Esri welcomes contributions from anyone and everyone. Please see our [guidelines for contributing](https://github.com/esri/contributing).
 
 ## Licensing
-Copyright 2022 Esri
+Copyright 2025 Esri
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
