@@ -1,8 +1,7 @@
 # Weighted-raster-overlay-service toolbox
 This python toolbox contains analysis tools that help prepare and configure data for a weighted overlay service. The tools apply the proper fields, properties, and metadata to your raster layers and mosaic dataset. The service can be used in web-based apps such as ArcGIS Experience Builder.
 
-![image](https://user-images.githubusercontent.com/59451655/175434439-66f9121e-0866-46c7-bb8d-5569d595518e.png)
-
+![image](https://github.com/user-attachments/assets/841b2446-ca2a-46dd-936e-a89aee9e141a)
 
 ## Tools
 |Toolname                      |Description   |
@@ -20,7 +19,7 @@ This python toolbox contains analysis tools that help prepare and configure data
 
 The toolbox contains the three aforementioned script tools.
 
-[Learn more about building a weighted overlay service with these scripts](https://doc.arcgis.com/en/geoplanner/latest/documentation/create-a-mosaic-dataset.htm)
+[Learn more about building a weighted overlay service with these scripts](https://doc.arcgis.com/en/experience-builder/latest/configure-widgets/create-a-weighted-overlay-mosaic.htm)
 
 ## Resources
 
