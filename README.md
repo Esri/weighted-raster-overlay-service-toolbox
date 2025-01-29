@@ -19,7 +19,7 @@ This python toolbox contains analysis tools that help prepare and configure data
 
 The toolbox contains the three aforementioned script tools.
 
-[Learn more about building a weighted overlay service with these scripts](https://doc.arcgis.com/en/experience-builder/latest/configure-widgets/create-a-weighted-overlay-mosaic.htm)
+[Learn more about building a weighted overlay service with these scripts](https://doc.arcgis.com/en/geoplanner/latest/documentation/create-a-mosaic-dataset.htm)
 
 ## Resources
 
